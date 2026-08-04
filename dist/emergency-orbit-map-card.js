@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.2.2 - worker-free Leaflet renderer */
+/* Emergency Orbit Map Card v0.2.3 - worker-free Leaflet renderer */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.2.2';
+const VERSION = '0.2.3';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -255,6 +255,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._config = DEFAULTS;
     this._map = null;
+    this._initialising = false;
     this._ready = false;
     this._layers = new Map();
     this._incidents = [];
@@ -299,6 +300,14 @@ class EmergencyOrbitMapCard extends HTMLElement {
   }
 
   _render() {
+    // Destroy any existing map before rebuilding the DOM
+    if (this._map) {
+      try { this._map.remove(); } catch (_) {}
+      this._map = null;
+      this._ready = false;
+      this._layers.clear();
+      this._homeMarker = null;
+    }
     const height = numberValue(this._config.map.height) ?? 520;
     const cssLinks = LEAFLET_CSS.map((url) => `<link rel="stylesheet" href="${url}">`).join('');
     this.shadowRoot.innerHTML = `
@@ -338,11 +347,16 @@ class EmergencyOrbitMapCard extends HTMLElement {
   _hideStatus() { this._elements.status.hidden = true; }
 
   async _initialise() {
-    if (this._map || !this._elements?.map) return;
+    if (this._map || this._initialising || !this._elements?.map) return;
+    // Leaflet stamps the container with _leaflet_id once initialized
+    if (this._elements.map._leaflet_id) return;
+    this._initialising = true;
     try {
       this._setStatus('Loading worker-free map engine…', 'Using Home Assistant Leaflet…');
       this._leaflet = await loadLeaflet();
       console.info(`[${TAG}] Leaflet ready`, this._leaflet && this._leaflet.version);
+      // Re-check after await — another call may have finished first
+      if (this._map || this._elements.map._leaflet_id) return;
       const region = getRegion(this._config, this._hass);
       this._elements.region.textContent = region.label;
       // Must provide center + zoom before any flyTo/flyToBounds
@@ -385,6 +399,8 @@ class EmergencyOrbitMapCard extends HTMLElement {
     } catch (error) {
       console.error(`[${TAG}]`, error);
       this._setStatus('Emergency map failed to start.', error.message);
+    } finally {
+      this._initialising = false;
     }
   }
 
@@ -577,4 +593,4 @@ window.customCards = window.customCards || [];
 if (!window.customCards.some((card) => card.type === TAG)) {
   window.customCards.push({ type: TAG, name: 'Emergency Orbit Map Card', description: 'Worker-free emergency map with live incidents, polygons, fly-in and orbit camera.' });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.2.2 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.2.3 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
