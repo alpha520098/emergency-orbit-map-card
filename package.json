@@ -1,6 +1,6 @@
 {
   "name": "emergency-orbit-map-card",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "A live 3D emergency incident map card for Home Assistant with cinematic fly-in and orbit camera movement.",
   "type": "module",
   "scripts": {
