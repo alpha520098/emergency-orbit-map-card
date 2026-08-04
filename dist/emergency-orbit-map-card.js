@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.3.5 - interactive map + reliable incident orbit */
+/* Emergency Orbit Map Card v0.3.6 - prevent programmatic camera moves cancelling incident orbit */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.3.5';
+const VERSION = '0.3.6';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -266,6 +266,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this._updateFrame = 0;
     this._bearing = 0;
     this._pitch = 0;
+    this._programmaticCameraMove = false;
   }
 
   setConfig(config) {
@@ -441,7 +442,12 @@ class EmergencyOrbitMapCard extends HTMLElement {
         updateWhenIdle: false,
         keepBuffer: 3,
       }).addTo(this._map);
-      this._map.on('dragstart zoomstart', () => this._stopCamera());
+      this._map.on('dragstart', () => {
+        this._stopCamera();
+      });
+      this._map.on('zoomstart', () => {
+        if (!this._programmaticCameraMove) this._stopCamera();
+      });
       this._ready = true;
       this._hideStatus();
       this._flattenScene(false);
@@ -631,15 +637,20 @@ class EmergencyOrbitMapCard extends HTMLElement {
     const token = ++this._animationToken;
     const doOrbit = forceOrbit || this._config.camera.orbit;
     const flyDuration = animate ? (numberValue(this._config.camera.fly_duration) ?? 2.8) : 0;
+    this._programmaticCameraMove = true;
 
     const startOrbit = () => {
       this._map.off('moveend', startOrbit);
       clearTimeout(this._orbitFallback);
       this._orbitFallback = 0;
+      this._programmaticCameraMove = false;
       if (token !== this._animationToken) return;
       if (doOrbit) this._orbitIncident(incident, token);
       else this._scheduleReturn(token);
     };
+
+    // Register before flyTo because Leaflet can complete instantly when already at target.
+    this._map.once('moveend', startOrbit);
 
     const layer = this._layers.get(incident.id);
     if (layer?.polygon) {
@@ -654,8 +665,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
       });
     }
 
-    this._map.once('moveend', startOrbit);
-    // Fallback: if already at the target, moveend may not fire
+    // Fallback: if already at the target, moveend may not fire.
     this._orbitFallback = window.setTimeout(startOrbit, Math.max(100, flyDuration * 1000 + 250));
   }
 
@@ -733,6 +743,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
 
   _stopCamera(flatten = true) {
     this._animationToken += 1;
+    this._programmaticCameraMove = false;
     cancelAnimationFrame(this._orbitFrame);
     clearTimeout(this._returnTimer);
     clearTimeout(this._orbitFallback);
@@ -752,4 +763,4 @@ if (!window.customCards.some((card) => card.type === TAG)) {
     description: 'Emergency map with interactive pan/zoom, CSS 3D orbit around incidents, animated home beacon and ABC Emergency support.',
   });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.5 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.6 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
