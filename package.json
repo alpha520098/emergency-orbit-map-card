@@ -1,17 +1,16 @@
 {
   "name": "emergency-orbit-map-card",
-  "version": "0.1.3",
-  "description": "A live 3D emergency incident map card for Home Assistant with cinematic fly-in and orbit camera movement.",
+  "version": "0.2.0-alpha",
+  "description": "A worker-free emergency incident map card for Home Assistant with live markers, polygons, cinematic fly-in and orbit movement.",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "check": "node --check src/emergency-orbit-map-card.js && node --check dist/emergency-orbit-map-card.js"
+    "check": "node --check dist/emergency-orbit-map-card.js"
   },
   "keywords": [
     "home-assistant",
     "hacs",
     "lovelace",
-    "maplibre",
+    "leaflet",
     "emergency-map"
   ],
   "license": "MIT",
