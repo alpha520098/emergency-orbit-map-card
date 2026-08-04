@@ -1,43 +1,650 @@
-/* Emergency Orbit Map Card v0.1.2-alpha */
-const TAG='emergency-orbit-map-card',VER='0.1.2-alpha',ML='5.24.0';
-const JS=[`https://cdn.jsdelivr.net/npm/maplibre-gl@${ML}/dist/maplibre-gl.js`,`https://unpkg.com/maplibre-gl@${ML}/dist/maplibre-gl.js`];
-const CSS=[`https://cdn.jsdelivr.net/npm/maplibre-gl@${ML}/dist/maplibre-gl.css`,`https://unpkg.com/maplibre-gl@${ML}/dist/maplibre-gl.css`];
-const STYLES=['https://tiles.openfreemap.org/styles/dark','https://tiles.openfreemap.org/styles/liberty','https://demotiles.maplibre.org/style.json'];
-const EMPTY={version:8,sources:{},layers:[{id:'bg',type:'background',paint:{'background-color':'#07101d'}}]};
-const D={title:'Emergency Orbit',demo_mode:false,debug:false,entities:{incidents:'sensor.abc_emergency_home_nearby_incidents'},region:{mode:'home',label:'Local emergency region',radius_km:40},map:{height:520,style_url:STYLES[0],terrain:true,terrain_url:'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',overview_pitch:50,incident_pitch:62,incident_zoom:14.2},camera:{orbit:true,orbit_duration:22000,auto_return:true,auto_return_delay:30000}};
-const L={none:{r:0,c:'#4f8cff',t:'INFORMATION'},minor:{r:1,c:'#4f8cff',t:'INFORMATION'},moderate:{r:2,c:'#f5ce35',t:'ADVICE'},severe:{r:3,c:'#ff812d',t:'WATCH AND ACT'},extreme:{r:4,c:'#ff414b',t:'EMERGENCY WARNING'}};
-let loader;
-const merge=(a,b)=>Object.fromEntries(Object.keys({...a,...b}).map(k=>[k,a[k]&&b?.[k]&&typeof a[k]=='object'&&typeof b[k]=='object'&&!Array.isArray(a[k])?merge(a[k],b[k]):b?.[k]??a[k]]));
-const n=v=>Number.isFinite(+v)?+v:null,clean=v=>{let s=String(v??'').trim();return !s||['unknown','unavailable','none','null'].includes(s.toLowerCase())?'':s},esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const lvl=v=>{let s=String(v??'').toLowerCase().replace(/[^a-z]+/g,'_');return ['emergency_warning','emergency','extreme'].includes(s)?'extreme':['watch_and_act','watch','severe'].includes(s)?'severe':['advice','moderate'].includes(s)?'moderate':['information','info','minor'].includes(s)?'minor':'none'};
-const ico=t=>{t=String(t).toLowerCase();return t.includes('fire')?'🔥':t.includes('flood')?'≋':t.includes('storm')||t.includes('thunder')?'ϟ':t.includes('wind')||t.includes('cyclone')?'↯':t.includes('traffic')||t.includes('road')||t.includes('vehicle')?'⚠':t.includes('rescue')?'✚':'!'};
-function script(url){return new Promise((ok,no)=>{let s=document.createElement('script'),to=setTimeout(()=>{s.remove();no(Error('Timed out: '+url))},15000);s.src=url;s.async=true;s.crossOrigin='anonymous';s.onload=()=>{clearTimeout(to);window.maplibregl?ok(window.maplibregl):no(Error('MapLibre API missing'))};s.onerror=()=>{clearTimeout(to);s.remove();no(Error('Failed: '+url))};document.head.append(s)})}
-function load(){if(window.maplibregl)return Promise.resolve(window.maplibregl);if(loader)return loader;loader=(async()=>{let e=[];for(let u of JS)try{return await script(u)}catch(x){e.push(x.message)}throw Error('MapLibre failed to load. '+e.join(' | '))})();loader.catch(()=>loader=null);return loader}
-async function json(url){let c=new AbortController(),to=setTimeout(()=>c.abort(),9000);try{let r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(to)}}
-function dest([x,y],b,k){let R=6371,d=k/R,q=b*Math.PI/180,p=y*Math.PI/180,l=x*Math.PI/180,p2=Math.asin(Math.sin(p)*Math.cos(d)+Math.cos(p)*Math.sin(d)*Math.cos(q)),l2=l+Math.atan2(Math.sin(q)*Math.sin(d)*Math.cos(p),Math.cos(d)-Math.sin(p)*Math.sin(p2));return[((l2*180/Math.PI+540)%360)-180,p2*180/Math.PI]}
-function reg(c,h){let home=[n(h?.config?.longitude)??150.7,n(h?.config?.latitude)??-34.05],r=c.region||{};if(r.mode=='custom')return{center:[n(r.longitude)??home[0],n(r.latitude)??home[1]],radius:n(r.radius_km)??40,label:r.label||'Custom region'};if(r.mode=='bounds'){let w=n(r.west),e=n(r.east),s=n(r.south),no=n(r.north);if([w,e,s,no].every(Number.isFinite))return{center:[(w+e)/2,(s+no)/2],bounds:[[w,s],[e,no]],label:r.label||'Defined region'}}return{center:home,radius:n(r.radius_km)??40,label:r.label||'Home region'}}
-function pt(a){let y=n(a?.latitude??a?.lat),x=n(a?.longitude??a?.lon??a?.lng);if(Number.isFinite(x)&&Number.isFinite(y))return[x,y];let c=a?.coordinates??a?.location;if(Array.isArray(c)&&c.length>1){let p=n(c[0]),q=n(c[1]);if(Number.isFinite(p)&&Number.isFinite(q))return Math.abs(p)<=90&&Math.abs(q)>90?[q,p]:[p,q]}return null}
-class Card extends HTMLElement{
- static getStubConfig(){return{...D,demo_mode:true}}
- constructor(){super();this.attachShadow({mode:'open'});this.c=D;this.map=null;this.ready=false;this.old=new Map;this.marks=new Map;this.items=[];this.token=0;this.timer=0;this.frame=0}
- setConfig(c){if(!c)throw Error('Configuration required');this.c=merge(D,c);this.render();if(this.isConnected)this.init()}
- set hass(h){this.h=h;if(!this.shadowRoot.innerHTML)this.render();this.update()}
- connectedCallback(){this.init()}
- disconnectedCallback(){this.stop();this.map?.remove();this.map=null;this.ready=false}
- getCardSize(){return Math.ceil((n(this.c.map.height)??520)/50)}
- getGridOptions(){return{columns:12,rows:Math.ceil((n(this.c.map.height)??520)/56),min_columns:6,min_rows:4}}
- msg(t,err=false){this.e.load.hidden=false;this.e.load.classList.toggle('err',err);this.e.load.innerHTML=`<div><b>${err?'Map could not initialise':esc(t)}</b>${err?`<small>${esc(t)}</small>`:''}<small>Card ${VER}</small></div>`}
- render(){let h=n(this.c.map.height)??520;this.shadowRoot.innerHTML=`${CSS.map(x=>`<link rel="stylesheet" href="${x}">`).join('')}<style>:host{display:block}ha-card{position:relative;overflow:hidden;background:#07101d;color:#fff;height:${h}px;border-radius:16px}.map,.shade{position:absolute;inset:0}.shade{pointer-events:none;background:linear-gradient(#02060e9e,transparent 28%,transparent 68%,#02060ed6)}.head{position:absolute;top:14px;left:16px}.title{font:700 16px system-ui}.region{font:600 11px system-ui;color:#b9c7db;text-transform:uppercase;letter-spacing:.12em}.notice{position:absolute;top:52px;left:16px;padding:7px 10px;border-radius:9px;background:#492a07e0;border:1px solid #f5ce3573;font:600 11px system-ui;color:#ffe69a}.panel{position:absolute;left:16px;right:16px;bottom:14px;padding:14px 16px;border:1px solid var(--sev);border-radius:14px;background:#050a14e8;backdrop-filter:blur(12px);display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center}.badge{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:#07101d;color:var(--sev);font-size:23px}.sev{font:800 10px system-ui;color:var(--sev);letter-spacing:.11em}.type{font:800 13px system-ui}.headline{font:600 13px system-ui;margin-top:3px}.meta{font:500 11px system-ui;color:#aab7ca;margin-top:4px}.controls{display:flex;gap:6px}.controls button{border:1px solid #ffffff29;background:#ffffff14;color:#fff;border-radius:9px;padding:8px 10px}.clear{position:absolute;left:16px;bottom:16px;padding:10px 12px;border:1px solid #ffffff24;border-radius:12px;background:#050a14bd;font:600 12px system-ui;color:#c7d2e3}.marker{width:34px;height:34px;border:0;border-radius:50% 50% 50% 5px;transform:rotate(-45deg);background:var(--c);box-shadow:0 0 0 5px #ffffff20,0 8px 22px #0008;color:#fff}.marker span{display:block;transform:rotate(45deg);font-size:17px}.home{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#07101d;border:2px solid #fff;font-size:17px}.loading{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:24px;text-align:center;font:600 13px system-ui;background:#07101d}.loading>div{display:grid;gap:8px}.loading small{display:block;color:#91a2ba}.loading.err b{color:#ff8f8f}.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{display:none}</style><ha-card><div class="map"></div><div class="shade"></div><div class="head"><div class="title">${esc(this.c.title)}</div><div class="region"></div></div><div class="notice" hidden></div><div class="clear">No active emergency incidents</div><div class="panel" hidden><div class="badge"></div><div><span class="sev"></span> · <span class="type"></span><div class="headline"></div><div class="meta"></div></div><div class="controls"><button data-a="overview">Overview</button><button data-a="orbit">Orbit</button></div></div><div class="loading"><div><b>Loading map engine…</b><small>Card ${VER}</small></div></div></ha-card>`;let q=x=>this.shadowRoot.querySelector(x);this.e={map:q('.map'),region:q('.region'),notice:q('.notice'),panel:q('.panel'),clear:q('.clear'),badge:q('.badge'),sev:q('.sev'),type:q('.type'),headline:q('.headline'),meta:q('.meta'),load:q('.loading')};this.shadowRoot.querySelectorAll('button').forEach(b=>b.onclick=()=>b.dataset.a=='overview'?this.overview(true):this.focus(this.items[0],true))}
- async init(){if(this.map||!this.e)return;try{this.msg('Loading map engine…');let ml=await load();if(ml.supported&&!ml.supported())throw Error('WebGL is unavailable or disabled');let r=reg(this.c,this.h);this.ml=ml;this.e.region.textContent=r.label;this.msg('Starting local map canvas…');this.map=new ml.Map({container:this.e.map,style:EMPTY,center:r.center,zoom:9,pitch:this.c.map.overview_pitch,bearing:-18,attributionControl:true});let last='';this.map.on('error',x=>{last=x?.error?.message||x?.message||'Unknown map error';if(this.c.debug)console.warn(TAG,x)});let to=setTimeout(()=>{if(!this.ready)this.msg(last||'Map canvas did not render. Check WebGL.',true)},12000);this.map.once('load',()=>{clearTimeout(to);this.ready=true;this.e.load.hidden=true;this.home=new ml.Marker({element:Object.assign(document.createElement('div'),{className:'home',textContent:'⌂'})}).setLngLat([n(this.h?.config?.longitude)??r.center[0],n(this.h?.config?.latitude)??r.center[1]]).addTo(this.map);requestAnimationFrame(()=>this.map?.resize());this.overview(false);this.update();this.basemap()});this.map.on('mousedown',()=>this.stop())}catch(e){console.error(TAG,e);this.msg(e.message,true)}}
- async basemap(){let urls=[...new Set([this.c.map.style_url,...STYLES].filter(Boolean))],errors=[];for(let i=0;i<urls.length;i++)try{this.e.notice.hidden=false;this.e.notice.textContent=i?'Trying fallback basemap…':'Loading basemap…';let s=await json(urls[i]);this.map.setStyle(s);await new Promise((ok,no)=>{let done=false,end=(f,v)=>{if(done)return;done=true;clearTimeout(to);f(v)},to=setTimeout(()=>end(no,Error('Style timeout')),12000);this.map.once('styledata',()=>this.map?.isStyleLoaded()&&end(ok));this.map.once('error',e=>/style|sprite|glyph|source/i.test(e?.error?.message||'')&&end(no,e.error));});this.e.notice.hidden=true;this.terrain();this.overview(false);return}catch(e){errors.push(e.message)}this.e.notice.hidden=false;this.e.notice.textContent='Basemap unavailable; incident markers remain active';console.warn(TAG,errors)}
- terrain(){if(!this.c.map.terrain||!this.map?.isStyleLoaded())return;try{this.map.addSource('terrain',{type:'raster-dem',tiles:[this.c.map.terrain_url],tileSize:256,encoding:'terrarium'});this.map.setTerrain({source:'terrain',exaggeration:1.3})}catch(e){if(this.c.debug)console.warn(TAG,e)}}
- collect(){if(this.c.demo_mode){let r=reg(this.c,this.h),a=[['Bushfire','severe'],['Flood','moderate'],['Storm Warning','extreme'],['Traffic Incident','minor']];return a.map((x,i)=>({id:'d'+i,type:x[0],level:x[1],headline:'Demonstration '+x[0].toLowerCase()+' incident',point:dest(r.center,35+i*82,8+i*5),distance:8+i*5,direction:'near the selected region'}))}let e=this.c.entities,near=this.h?.states?.[e.incidents],base=Array.isArray(near?.attributes?.incidents)?near.attributes.incidents:[],ids=Array.isArray(near?.attributes?.entity_ids)?near.attributes.entity_ids:[];return base.map((raw,i)=>{let slug=String(raw.id??'').toLowerCase().replace(/[^a-z0-9]+/g,'_'),id=ids.find(x=>slug&&String(x).endsWith(slug))??ids[i],geo=id?this.h?.states?.[id]:null,a=geo?.attributes??{},type=clean(a.event_type??raw.event_type??'Emergency incident');if(type.toLowerCase()=='other non-urgent alerts')return null;return{id:String(raw.id??id??i),type,level:lvl(a.alert_level??raw.alert_level),headline:clean(a.friendly_name??a.headline??raw.headline??'Incident details updating'),point:pt(a)??pt(raw),distance:n(geo?.state??raw.distance_km),direction:clean(a.direction??raw.direction),status:clean(a.status)}}).filter(x=>x?.point).sort((a,b)=>L[b.level].r-L[a.level].r||(a.distance??9999)-(b.distance??9999))}
- update(){if(!this.h&&!this.c.demo_mode)return;let list=this.collect(),old=this.old;this.items=list;this.old=new Map(list.map(x=>[x.id,x.level]));if(this.ready)this.draw();let fresh=list.find(x=>!old.has(x.id)||L[x.level].r>L[old.get(x.id)||'none'].r);if(fresh&&this.ready)this.focus(fresh,true)}
- draw(){let active=new Set(this.items.map(x=>x.id));for(let x of this.items){let m=this.marks.get(x.id);if(!m){let el=document.createElement('button');el.className='marker';el.innerHTML=`<span>${ico(x.type)}</span>`;el.onclick=()=>this.focus(x,true);m={el,marker:new this.ml.Marker({element:el,anchor:'bottom'}).setLngLat(x.point).addTo(this.map)};this.marks.set(x.id,m)}m.marker.setLngLat(x.point);m.el.style.setProperty('--c',L[x.level].c)}for(let[id,m]of this.marks)if(!active.has(id)){m.marker.remove();this.marks.delete(id)}this.e.clear.hidden=!!this.items.length;if(!this.items.length)this.e.panel.hidden=true}
- focus(x,ani){if(!x||!this.ready)return;this.stop();let s=L[x.level];this.e.panel.hidden=false;this.e.panel.style.setProperty('--sev',s.c);this.e.badge.textContent=ico(x.type);this.e.sev.textContent=s.t;this.e.type.textContent=x.type.toUpperCase();this.e.headline.textContent=x.headline;this.e.meta.textContent=[Number.isFinite(x.distance)?x.distance.toFixed(1)+' km':'',x.direction,x.status].filter(Boolean).join(' · ');this.map.flyTo({center:x.point,zoom:this.c.map.incident_zoom,pitch:this.c.map.incident_pitch,bearing:this.map.getBearing(),duration:ani?3400:0,essential:true});let t=++this.token;this.map.once('moveend',()=>t==this.token&&(this.c.camera.orbit?this.orbit(x,t):this.schedule(t)))}
- orbit(x,t){let st=performance.now(),d=Math.max(6000,n(this.c.camera.orbit_duration)??22000),b=this.map.getBearing(),step=now=>{if(t!=this.token)return;let p=Math.min(1,(now-st)/d),e=p<.5?2*p*p:1-(-2*p+2)**2/2;this.map.jumpTo({center:x.point,bearing:b+360*e,pitch:this.c.map.incident_pitch});p<1?this.frame=requestAnimationFrame(step):this.schedule(t)};this.frame=requestAnimationFrame(step)}
- schedule(t){if(this.c.camera.auto_return)this.timer=setTimeout(()=>t==this.token&&this.overview(true),n(this.c.camera.auto_return_delay)??30000)}
- overview(ani){if(!this.ready)return;this.stop();this.e.panel.hidden=true;let r=reg(this.c,this.h),b=r.bounds??[dest(r.center,225,r.radius),dest(r.center,45,r.radius)];this.map.fitBounds(b,{padding:60,duration:ani?1800:0,pitch:this.c.map.overview_pitch,bearing:-18,maxZoom:12,essential:true})}
- stop(){this.token++;cancelAnimationFrame(this.frame);clearTimeout(this.timer);this.frame=this.timer=0}
+/* Emergency Orbit Map Card v0.1.3-alpha */
+const TAG = 'emergency-orbit-map-card';
+const VERSION = '0.1.3-alpha';
+const MAPLIBRE_VERSION = '5.24.0';
+
+const MAPLIBRE_JS = [
+  `https://cdn.jsdelivr.net/npm/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl-csp.js`,
+  `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl-csp.js`,
+];
+
+const MAPLIBRE_CSS = [
+  `https://cdn.jsdelivr.net/npm/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.css`,
+  `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.css`,
+];
+
+const BASEMAPS = [
+  'https://tiles.openfreemap.org/styles/dark',
+  'https://tiles.openfreemap.org/styles/liberty',
+  'https://demotiles.maplibre.org/style.json',
+];
+
+const EMPTY_STYLE = {
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#07101d' },
+    },
+  ],
+};
+
+const DEFAULTS = {
+  title: 'Emergency Orbit',
+  demo_mode: false,
+  debug: false,
+  entities: {
+    incidents: 'sensor.abc_emergency_home_nearby_incidents',
+    nearest: 'sensor.abc_emergency_home_nearest_incident',
+    active: 'binary_sensor.abc_emergency_home_active_alert',
+    inside_polygon: 'binary_sensor.abc_emergency_home_inside_polygon',
+  },
+  region: {
+    mode: 'home',
+    label: 'Local emergency region',
+    radius_km: 40,
+  },
+  map: {
+    height: 520,
+    style_url: BASEMAPS[0],
+    terrain: true,
+    terrain_url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+    terrain_exaggeration: 1.25,
+    overview_pitch: 48,
+    overview_bearing: -18,
+    incident_pitch: 62,
+    incident_zoom: 14.2,
+  },
+  camera: {
+    orbit: true,
+    orbit_duration: 22000,
+    auto_return: true,
+    auto_return_delay: 30000,
+  },
+};
+
+const LEVELS = {
+  none: { rank: 0, colour: '#4f8cff', label: 'INFORMATION' },
+  minor: { rank: 1, colour: '#4f8cff', label: 'INFORMATION' },
+  moderate: { rank: 2, colour: '#f5ce35', label: 'ADVICE' },
+  severe: { rank: 3, colour: '#ff812d', label: 'WATCH AND ACT' },
+  extreme: { rank: 4, colour: '#ff414b', label: 'EMERGENCY WARNING' },
+};
+
+let mapLibrePromise = null;
+
+const deepMerge = (base, next) => Object.fromEntries(
+  Object.keys({ ...base, ...next }).map((key) => {
+    const left = base?.[key];
+    const right = next?.[key];
+    const mergeable =
+      left && right &&
+      typeof left === 'object' &&
+      typeof right === 'object' &&
+      !Array.isArray(left) &&
+      !Array.isArray(right);
+    return [key, mergeable ? deepMerge(left, right) : right ?? left];
+  })
+);
+
+const numberValue = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const clean = (value) => {
+  const text = String(value ?? '').trim();
+  return !text || ['unknown', 'unavailable', 'none', 'null'].includes(text.toLowerCase())
+    ? ''
+    : text;
+};
+
+const escapeHtml = (value) => String(value ?? '').replace(
+  /[&<>"']/g,
+  (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]
+);
+
+const normaliseLevel = (value) => {
+  const key = String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (['emergency_warning', 'emergency', 'extreme'].includes(key)) return 'extreme';
+  if (['watch_and_act', 'watch', 'severe'].includes(key)) return 'severe';
+  if (['advice', 'moderate'].includes(key)) return 'moderate';
+  if (['information', 'info', 'minor'].includes(key)) return 'minor';
+  return 'none';
+};
+
+const incidentIcon = (value) => {
+  const type = String(value ?? '').toLowerCase();
+  if (type.includes('fire')) return '🔥';
+  if (type.includes('flood')) return '≋';
+  if (type.includes('storm') || type.includes('thunder')) return 'ϟ';
+  if (type.includes('wind') || type.includes('cyclone')) return '↯';
+  if (type.includes('traffic') || type.includes('road') || type.includes('vehicle')) return '⚠';
+  if (type.includes('rescue')) return '✚';
+  return '!';
+};
+
+const destination = ([longitude, latitude], bearing, distanceKm) => {
+  const radius = 6371;
+  const angularDistance = distanceKm / radius;
+  const bearingRadians = bearing * Math.PI / 180;
+  const latitudeRadians = latitude * Math.PI / 180;
+  const longitudeRadians = longitude * Math.PI / 180;
+
+  const destinationLatitude = Math.asin(
+    Math.sin(latitudeRadians) * Math.cos(angularDistance) +
+    Math.cos(latitudeRadians) * Math.sin(angularDistance) * Math.cos(bearingRadians)
+  );
+
+  const destinationLongitude = longitudeRadians + Math.atan2(
+    Math.sin(bearingRadians) * Math.sin(angularDistance) * Math.cos(latitudeRadians),
+    Math.cos(angularDistance) - Math.sin(latitudeRadians) * Math.sin(destinationLatitude)
+  );
+
+  return [
+    ((destinationLongitude * 180 / Math.PI + 540) % 360) - 180,
+    destinationLatitude * 180 / Math.PI,
+  ];
+};
+
+const getRegion = (config, hass) => {
+  const home = [
+    numberValue(hass?.config?.longitude) ?? 150.7,
+    numberValue(hass?.config?.latitude) ?? -34.05,
+  ];
+  const region = config.region ?? {};
+
+  if (region.mode === 'custom') {
+    return {
+      centre: [
+        numberValue(region.longitude) ?? home[0],
+        numberValue(region.latitude) ?? home[1],
+      ],
+      radius: numberValue(region.radius_km) ?? 40,
+      label: region.label || 'Custom region',
+    };
+  }
+
+  if (region.mode === 'bounds') {
+    const west = numberValue(region.west);
+    const east = numberValue(region.east);
+    const south = numberValue(region.south);
+    const north = numberValue(region.north);
+
+    if ([west, east, south, north].every(Number.isFinite)) {
+      return {
+        centre: [(west + east) / 2, (south + north) / 2],
+        bounds: [[west, south], [east, north]],
+        label: region.label || 'Defined region',
+      };
+    }
+  }
+
+  return {
+    centre: home,
+    radius: numberValue(region.radius_km) ?? 40,
+    label: region.label || 'Home region',
+  };
+};
+
+const extractPoint = (attributes) => {
+  if (!attributes || typeof attributes !== 'object') return null;
+
+  const latitude = numberValue(attributes.latitude ?? attributes.lat);
+  const longitude = numberValue(attributes.longitude ?? attributes.lon ?? attributes.lng);
+
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    return [longitude, latitude];
+  }
+
+  const coordinates = attributes.coordinates ?? attributes.location;
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
+
+  const first = numberValue(coordinates[0]);
+  const second = numberValue(coordinates[1]);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
+
+  return Math.abs(first) <= 90 && Math.abs(second) > 90
+    ? [second, first]
+    : [first, second];
+};
+
+const loadScript = (url) => new Promise((resolve, reject) => {
+  const script = document.createElement('script');
+  const timeout = window.setTimeout(() => {
+    script.remove();
+    reject(new Error(`Timed out loading ${url}`));
+  }, 20000);
+
+  script.src = url;
+  script.async = true;
+  script.crossOrigin = 'anonymous';
+  script.onload = () => {
+    clearTimeout(timeout);
+    if (window.maplibregl) resolve(window.maplibregl);
+    else reject(new Error(`MapLibre loaded without exposing maplibregl: ${url}`));
+  };
+  script.onerror = () => {
+    clearTimeout(timeout);
+    script.remove();
+    reject(new Error(`Failed to load ${url}`));
+  };
+  document.head.append(script);
+});
+
+const loadMapLibre = async () => {
+  if (window.maplibregl) return window.maplibregl;
+  if (mapLibrePromise) return mapLibrePromise;
+
+  mapLibrePromise = (async () => {
+    const failures = [];
+    for (const url of MAPLIBRE_JS) {
+      try {
+        return await loadScript(url);
+      } catch (error) {
+        failures.push(error.message);
+      }
+    }
+    throw new Error(`MapLibre CSP build failed to load. ${failures.join(' | ')}`);
+  })();
+
+  mapLibrePromise.catch(() => { mapLibrePromise = null; });
+  return mapLibrePromise;
+};
+
+class EmergencyOrbitMapCard extends HTMLElement {
+  static getStubConfig() {
+    return deepMerge(DEFAULTS, { demo_mode: true });
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._config = DEFAULTS;
+    this._map = null;
+    this._mapReady = false;
+    this._markers = new Map();
+    this._incidents = [];
+    this._previousLevels = new Map();
+    this._selectedId = null;
+    this._animationToken = 0;
+    this._orbitFrame = 0;
+    this._returnTimer = 0;
+    this._startupTimer = 0;
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error('Emergency Orbit Map Card requires configuration.');
+    this._config = deepMerge(DEFAULTS, config);
+    this._render();
+    if (this.isConnected) this._initialise();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this.shadowRoot.innerHTML) this._render();
+    this._updateIncidents();
+  }
+
+  connectedCallback() {
+    this._initialise();
+  }
+
+  disconnectedCallback() {
+    this._stopCamera();
+    clearTimeout(this._startupTimer);
+    this._map?.remove();
+    this._map = null;
+    this._mapReady = false;
+  }
+
+  getCardSize() {
+    return Math.ceil((numberValue(this._config.map.height) ?? 520) / 50);
+  }
+
+  getGridOptions() {
+    return {
+      columns: 12,
+      rows: Math.ceil((numberValue(this._config.map.height) ?? 520) / 56),
+      min_columns: 6,
+      min_rows: 4,
+    };
+  }
+
+  _render() {
+    const height = numberValue(this._config.map.height) ?? 520;
+    const cssLinks = MAPLIBRE_CSS.map(
+      (url) => `<link rel="stylesheet" href="${url}">`
+    ).join('');
+
+    this.shadowRoot.innerHTML = `
+      ${cssLinks}
+      <style>
+        :host { display: block; }
+        ha-card { position:relative; height:${height}px; overflow:hidden; border-radius:16px; color:#fff; background:#07101d; }
+        .map { position:absolute; inset:0; }
+        .shade { position:absolute; inset:0; pointer-events:none; background:linear-gradient(180deg,rgba(2,6,14,.65),transparent 27%,transparent 67%,rgba(2,6,14,.86)); }
+        .header { position:absolute; top:14px; left:16px; right:16px; pointer-events:none; }
+        .title { font:700 16px system-ui; }
+        .region { margin-top:3px; font:600 11px system-ui; color:#b9c7db; text-transform:uppercase; letter-spacing:.12em; }
+        .clear-state { position:absolute; left:16px; bottom:16px; padding:10px 12px; border:1px solid rgba(255,255,255,.14); border-radius:12px; background:rgba(5,10,20,.76); color:#c7d2e3; font:600 12px system-ui; backdrop-filter:blur(12px); }
+        .panel { position:absolute; left:16px; right:16px; bottom:14px; display:grid; grid-template-columns:42px minmax(0,1fr) auto; gap:12px; align-items:center; padding:14px 16px; border:1px solid color-mix(in srgb,var(--severity) 70%,transparent); border-radius:14px; background:rgba(5,10,20,.89); backdrop-filter:blur(12px); }
+        .badge { width:42px; height:42px; display:grid; place-items:center; border-radius:11px; color:var(--severity); background:color-mix(in srgb,var(--severity) 18%,#07101d); font-size:23px; }
+        .severity { color:var(--severity); font:800 10px system-ui; letter-spacing:.11em; }
+        .type { font:800 13px system-ui; }
+        .headline { margin-top:3px; font:600 13px system-ui; }
+        .meta { margin-top:4px; color:#aab7ca; font:500 11px system-ui; }
+        .controls { display:flex; gap:6px; }
+        button.control { padding:8px 10px; border:1px solid rgba(255,255,255,.16); border-radius:9px; color:#fff; background:rgba(255,255,255,.08); cursor:pointer; }
+        .marker { width:34px; height:34px; border:0; border-radius:50% 50% 50% 5px; transform:rotate(-45deg); color:#fff; background:var(--marker-colour); box-shadow:0 0 0 5px color-mix(in srgb,var(--marker-colour) 25%,transparent),0 8px 22px #0008; cursor:pointer; }
+        .marker span { display:block; transform:rotate(45deg); font-size:17px; }
+        .home-marker { width:28px; height:28px; display:grid; place-items:center; border:2px solid #fff; border-radius:50%; color:#fff; background:#07101d; box-shadow:0 5px 18px #0009; font-size:17px; }
+        .status { position:absolute; inset:0; z-index:20; display:grid; place-items:center; padding:24px; text-align:center; color:#fff; background:#07101d; font:600 13px system-ui; }
+        .status small { display:block; margin-top:10px; color:#8fb4df; font-weight:500; }
+        @media(max-width:650px){.panel{grid-template-columns:36px minmax(0,1fr)}.badge{width:36px;height:36px}.controls{grid-column:1/-1;justify-content:flex-end}}
+      </style>
+      <ha-card>
+        <div class="map"></div><div class="shade"></div>
+        <div class="header"><div class="title">${escapeHtml(this._config.title)}</div><div class="region"></div></div>
+        <div class="clear-state">No active emergency incidents</div>
+        <div class="panel" hidden><div class="badge"></div><div><div><span class="severity"></span> · <span class="type"></span></div><div class="headline"></div><div class="meta"></div></div><div class="controls"><button class="control" data-action="overview">Overview</button><button class="control" data-action="orbit">Orbit</button></div></div>
+        <div class="status"><div>Loading local CSP map engine…<small>Card ${VERSION}</small></div></div>
+      </ha-card>`;
+
+    this._elements = {
+      map: this.shadowRoot.querySelector('.map'),
+      region: this.shadowRoot.querySelector('.region'),
+      clear: this.shadowRoot.querySelector('.clear-state'),
+      panel: this.shadowRoot.querySelector('.panel'),
+      badge: this.shadowRoot.querySelector('.badge'),
+      severity: this.shadowRoot.querySelector('.severity'),
+      type: this.shadowRoot.querySelector('.type'),
+      headline: this.shadowRoot.querySelector('.headline'),
+      meta: this.shadowRoot.querySelector('.meta'),
+      status: this.shadowRoot.querySelector('.status'),
+    };
+
+    this.shadowRoot.querySelector('[data-action="overview"]').addEventListener('click', () => this._showOverview(true));
+    this.shadowRoot.querySelector('[data-action="orbit"]').addEventListener('click', () => {
+      const incident = this._incidents.find((item) => item.id === this._selectedId) ?? this._incidents[0];
+      this._focusIncident(incident, true);
+    });
+  }
+
+  _setStatus(message, detail = '') {
+    if (!this._elements?.status) return;
+    this._elements.status.hidden = false;
+    this._elements.status.innerHTML = `<div>${escapeHtml(message)}<small>${escapeHtml(detail || `Card ${VERSION}`)}</small></div>`;
+  }
+
+  _hideStatus() {
+    if (this._elements?.status) this._elements.status.hidden = true;
+  }
+
+  async _initialise() {
+    if (this._map || !this._elements?.map) return;
+
+    try {
+      this._setStatus('Loading local CSP map engine…');
+      const maplibregl = await loadMapLibre();
+      const workerUrl = new URL(`./maplibre-csp-worker-proxy.js?v=${VERSION}`, import.meta.url).href;
+      maplibregl.setWorkerUrl(workerUrl);
+      maplibregl.setWorkerCount?.(1);
+
+      const region = getRegion(this._config, this._hass);
+      this._elements.region.textContent = region.label;
+      this._setStatus('Starting CSP-safe map canvas…', `Worker: local HACS file · Card ${VERSION}`);
+
+      this._startupTimer = window.setTimeout(() => {
+        if (!this._mapReady) this._setStatus('Map engine did not finish starting.', 'Check browser console for worker, WebGL or Content Security Policy errors.');
+      }, 15000);
+
+      this._maplibregl = maplibregl;
+      this._map = new maplibregl.Map({
+        container: this._elements.map,
+        style: EMPTY_STYLE,
+        center: region.centre,
+        zoom: 9,
+        pitch: this._config.map.overview_pitch,
+        bearing: this._config.map.overview_bearing,
+        attributionControl: true,
+        maplibreLogo: false,
+      });
+
+      this._map.once('load', () => this._onLocalMapReady(region));
+      this._map.on('mousedown', () => this._stopCamera());
+      this._map.on('error', (event) => {
+        const error = event?.error ?? event;
+        console.warn(`[${TAG}] MapLibre error`, error);
+        if (!this._mapReady) this._setStatus('MapLibre reported an error.', error?.message || String(error));
+      });
+    } catch (error) {
+      console.error(`[${TAG}] Startup failure`, error);
+      this._setStatus('Emergency map failed to start.', error.message);
+    }
+  }
+
+  _onLocalMapReady(region) {
+    clearTimeout(this._startupTimer);
+    this._mapReady = true;
+    this._hideStatus();
+
+    const homeElement = document.createElement('div');
+    homeElement.className = 'home-marker';
+    homeElement.textContent = '⌂';
+    this._homeMarker = new this._maplibregl.Marker({ element: homeElement })
+      .setLngLat([numberValue(this._hass?.config?.longitude) ?? region.centre[0], numberValue(this._hass?.config?.latitude) ?? region.centre[1]])
+      .addTo(this._map);
+
+    this._showOverview(false);
+    this._updateIncidents();
+    this._loadBasemap();
+  }
+
+  async _loadBasemap() {
+    const requested = clean(this._config.map.style_url);
+    const styles = [...new Set([requested, ...BASEMAPS].filter(Boolean))];
+    for (const styleUrl of styles) {
+      try {
+        await this._tryStyle(styleUrl);
+        this._enableTerrain();
+        return;
+      } catch (error) {
+        console.warn(`[${TAG}] Basemap failed: ${styleUrl}`, error);
+      }
+    }
+    console.warn(`[${TAG}] All remote basemaps failed. Incident markers remain available.`);
+  }
+
+  _tryStyle(styleUrl) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (success, error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        this._map.off('style.load', onLoad);
+        this._map.off('error', onError);
+        success ? resolve() : reject(error);
+      };
+      const timeout = window.setTimeout(() => finish(false, new Error('Basemap timed out')), 12000);
+      const onLoad = () => finish(true);
+      const onError = (event) => {
+        const error = event?.error ?? event;
+        if (/style|sprite|glyph|source/i.test(error?.message || '')) finish(false, error);
+      };
+      this._map.once('style.load', onLoad);
+      this._map.on('error', onError);
+      try { this._map.setStyle(styleUrl, { diff: false }); }
+      catch (error) { finish(false, error); }
+    });
+  }
+
+  _enableTerrain() {
+    if (!this._config.map.terrain || !this._mapReady) return;
+    try {
+      if (!this._map.getSource('emergency-terrain')) {
+        this._map.addSource('emergency-terrain', { type:'raster-dem', tiles:[this._config.map.terrain_url], tileSize:256, encoding:'terrarium' });
+      }
+      this._map.setTerrain({ source:'emergency-terrain', exaggeration:numberValue(this._config.map.terrain_exaggeration) ?? 1.25 });
+    } catch (error) {
+      console.warn(`[${TAG}] Terrain unavailable`, error);
+    }
+  }
+
+  _collectIncidents() {
+    if (this._config.demo_mode) {
+      const region = getRegion(this._config, this._hass);
+      const samples = [['Bushfire','severe'],['Flood','moderate'],['Storm Warning','extreme'],['Traffic Incident','minor']];
+      return samples.map(([type, level], index) => ({
+        id:`demo-${index}`, type, level,
+        headline:`Demonstration ${type.toLowerCase()} incident`,
+        point:destination(region.centre, 35 + index * 82, 8 + index * 5),
+        distance:8 + index * 5,
+        direction:'inside the selected region',
+        status:'Demo data',
+      }));
+    }
+
+    const entityIds = this._config.entities;
+    const nearby = this._hass?.states?.[entityIds.incidents];
+    const base = Array.isArray(nearby?.attributes?.incidents) ? nearby.attributes.incidents : [];
+    const generatedIds = Array.isArray(nearby?.attributes?.entity_ids) ? nearby.attributes.entity_ids : [];
+
+    const incidents = base.map((raw, index) => {
+      const slug = String(raw.id ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const generatedId = generatedIds.find((id) => slug && String(id).endsWith(slug)) ?? generatedIds[index];
+      const generated = generatedId ? this._hass?.states?.[generatedId] : null;
+      const attributes = generated?.attributes ?? {};
+      const type = clean(attributes.event_type ?? raw.event_type ?? 'Emergency incident');
+      if (type.toLowerCase() === 'other non-urgent alerts') return null;
+      return {
+        id:String(raw.id ?? generatedId ?? index),
+        type,
+        level:normaliseLevel(attributes.alert_level ?? raw.alert_level),
+        headline:clean(attributes.headline ?? attributes.friendly_name ?? raw.headline ?? 'Incident details updating'),
+        point:extractPoint(attributes) ?? extractPoint(raw),
+        distance:numberValue(generated?.state ?? raw.distance_km),
+        direction:clean(attributes.direction ?? raw.direction),
+        status:clean(attributes.status),
+      };
+    }).filter((incident) => incident?.point);
+
+    return incidents.sort((left, right) => LEVELS[right.level].rank - LEVELS[left.level].rank || (left.distance ?? 99999) - (right.distance ?? 99999));
+  }
+
+  _updateIncidents() {
+    if (!this._hass && !this._config.demo_mode) return;
+    const incidents = this._collectIncidents();
+    const previous = this._previousLevels;
+    this._incidents = incidents;
+    this._previousLevels = new Map(incidents.map((incident) => [incident.id, incident.level]));
+    if (this._mapReady) this._drawMarkers();
+    const importantChange = incidents.find((incident) => !previous.has(incident.id) || LEVELS[incident.level].rank > LEVELS[previous.get(incident.id) ?? 'none'].rank);
+    if (importantChange && this._mapReady) this._focusIncident(importantChange, true);
+  }
+
+  _drawMarkers() {
+    const activeIds = new Set(this._incidents.map((incident) => incident.id));
+    for (const incident of this._incidents) {
+      let item = this._markers.get(incident.id);
+      if (!item) {
+        const element = document.createElement('button');
+        element.className = 'marker';
+        element.innerHTML = `<span>${incidentIcon(incident.type)}</span>`;
+        element.addEventListener('click', () => this._focusIncident(incident, true));
+        item = { element, marker:new this._maplibregl.Marker({ element, anchor:'bottom' }).setLngLat(incident.point).addTo(this._map) };
+        this._markers.set(incident.id, item);
+      }
+      item.marker.setLngLat(incident.point);
+      item.element.style.setProperty('--marker-colour', LEVELS[incident.level].colour);
+    }
+    for (const [id, item] of this._markers) {
+      if (!activeIds.has(id)) { item.marker.remove(); this._markers.delete(id); }
+    }
+    this._elements.clear.hidden = this._incidents.length > 0;
+    if (!this._incidents.length) this._elements.panel.hidden = true;
+  }
+
+  _focusIncident(incident, animate) {
+    if (!incident || !this._mapReady) return;
+    this._stopCamera();
+    this._selectedId = incident.id;
+    const severity = LEVELS[incident.level];
+    this._elements.panel.hidden = false;
+    this._elements.panel.style.setProperty('--severity', severity.colour);
+    this._elements.badge.textContent = incidentIcon(incident.type);
+    this._elements.severity.textContent = severity.label;
+    this._elements.type.textContent = incident.type.toUpperCase();
+    this._elements.headline.textContent = incident.headline;
+    this._elements.meta.textContent = [Number.isFinite(incident.distance) ? `${incident.distance.toFixed(1)} km` : '', incident.direction, incident.status].filter(Boolean).join(' · ');
+
+    const token = ++this._animationToken;
+    this._map.flyTo({ center:incident.point, zoom:numberValue(this._config.map.incident_zoom) ?? 14.2, pitch:numberValue(this._config.map.incident_pitch) ?? 62, bearing:this._map.getBearing(), duration:animate ? 3400 : 0, essential:true });
+    this._map.once('moveend', () => {
+      if (token !== this._animationToken) return;
+      if (this._config.camera.orbit) this._orbitIncident(incident, token);
+      else this._scheduleReturn(token);
+    });
+  }
+
+  _orbitIncident(incident, token) {
+    const started = performance.now();
+    const duration = Math.max(6000, numberValue(this._config.camera.orbit_duration) ?? 22000);
+    const initialBearing = this._map.getBearing();
+    const frame = (now) => {
+      if (token !== this._animationToken) return;
+      const progress = Math.min(1, (now - started) / duration);
+      const eased = progress < 0.5 ? 2 * progress * progress : 1 - ((-2 * progress + 2) ** 2) / 2;
+      this._map.jumpTo({ center:incident.point, bearing:initialBearing + 360 * eased, pitch:numberValue(this._config.map.incident_pitch) ?? 62 });
+      if (progress < 1) this._orbitFrame = requestAnimationFrame(frame);
+      else this._scheduleReturn(token);
+    };
+    this._orbitFrame = requestAnimationFrame(frame);
+  }
+
+  _scheduleReturn(token) {
+    if (!this._config.camera.auto_return) return;
+    this._returnTimer = window.setTimeout(() => {
+      if (token === this._animationToken) this._showOverview(true);
+    }, numberValue(this._config.camera.auto_return_delay) ?? 30000);
+  }
+
+  _showOverview(animate) {
+    if (!this._mapReady) return;
+    this._stopCamera();
+    this._selectedId = null;
+    this._elements.panel.hidden = true;
+    const region = getRegion(this._config, this._hass);
+    let bounds = region.bounds;
+    if (!bounds) bounds = [destination(region.centre, 225, region.radius), destination(region.centre, 45, region.radius)];
+    this._map.fitBounds(bounds, { padding:60, duration:animate ? 1800 : 0, pitch:numberValue(this._config.map.overview_pitch) ?? 48, bearing:numberValue(this._config.map.overview_bearing) ?? -18, maxZoom:12, essential:true });
+  }
+
+  _stopCamera() {
+    this._animationToken += 1;
+    cancelAnimationFrame(this._orbitFrame);
+    clearTimeout(this._returnTimer);
+    this._orbitFrame = 0;
+    this._returnTimer = 0;
+  }
 }
-if(!customElements.get(TAG))customElements.define(TAG,Card);window.customCards=window.customCards||[];if(!window.customCards.some(x=>x.type==TAG))window.customCards.push({type:TAG,name:'Emergency Orbit Map Card',description:'Live 3D emergency map with fly-in and orbit camera'});console.info(`%c EMERGENCY ORBIT MAP CARD %c v${VER} `,'color:white;background:#1976d2;padding:3px','color:#dbeafe;background:#0f172a;padding:3px');
+
+if (!customElements.get(TAG)) customElements.define(TAG, EmergencyOrbitMapCard);
+window.customCards = window.customCards || [];
+if (!window.customCards.some((card) => card.type === TAG)) {
+  window.customCards.push({ type:TAG, name:'Emergency Orbit Map Card', description:'Live 3D emergency map using a CSP-safe worker and orbit camera.' });
+}
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.1.3-alpha ','color:white;background:#1976d2;padding:3px','color:#dbeafe;background:#0f172a;padding:3px');
