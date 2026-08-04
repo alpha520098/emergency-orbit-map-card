@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.2.3 - worker-free Leaflet renderer */
+/* Emergency Orbit Map Card v0.3.0 - CSS 3D orbit + animated beacon */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.2.3';
+const VERSION = '0.3.0';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -41,10 +41,10 @@ const DEFAULTS = {
   },
   camera: {
     orbit: true,
-    orbit_duration: 22000,
-    fly_duration: 3.2,
+    orbit_duration: 18000,
+    fly_duration: 2.8,
     auto_return: true,
-    auto_return_delay: 30000,
+    auto_return_delay: 4000,
   },
   display: {
     show_controls: true,
@@ -86,7 +86,7 @@ const clean = (value) => {
 };
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;',
 })[character]);
 
 const normaliseLevel = (value) => {
@@ -222,24 +222,20 @@ const loadScript = (url) => new Promise((resolve, reject) => {
 });
 
 const loadLeaflet = () => {
-  // Prefer Leaflet already provided by Home Assistant / other cards
   if (window.L && typeof window.L.map === 'function') {
     return Promise.resolve(window.L);
   }
   if (leafletPromise) return leafletPromise;
   leafletPromise = (async () => {
-    // Poll briefly in case another card is still loading Leaflet
     for (let i = 0; i < 30; i++) {
       if (window.L && typeof window.L.map === 'function') return window.L;
       await new Promise((r) => setTimeout(r, 100));
     }
-    // Fallback: try CDN
     const failures = [];
     for (const url of LEAFLET_JS) {
       try { return await loadScript(url); }
       catch (error) { failures.push(error.message); }
     }
-    // One last check
     if (window.L && typeof window.L.map === 'function') return window.L;
     throw new Error(`Leaflet not available. HA did not expose L and CDN failed: ${failures.join(' | ')}`);
   })();
@@ -300,7 +296,6 @@ class EmergencyOrbitMapCard extends HTMLElement {
   }
 
   _render() {
-    // Destroy any existing map before rebuilding the DOM
     if (this._map) {
       try { this._map.remove(); } catch (_) {}
       this._map = null;
@@ -313,14 +308,47 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       ${cssLinks}
       <style>
-        :host{display:block}ha-card{position:relative;height:${height}px;overflow:hidden;border-radius:16px;color:#fff;background:#07101d}
-        .viewport{position:absolute;inset:0;overflow:hidden;background:#07101d}.scene{position:absolute;inset:-18%;transform-origin:50% 50%;will-change:transform;transition:transform 1.5s cubic-bezier(.2,.75,.2,1)}.map{position:absolute;inset:0;background:#07101d}
-        .leaflet-container{overflow:hidden;outline:0;background:#07101d;font-family:system-ui}.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box{position:absolute;left:0;top:0}.leaflet-container img.leaflet-tile{max-width:none!important;max-height:none!important;width:256px;height:256px}.leaflet-tile{visibility:hidden}.leaflet-tile-loaded{visibility:inherit}.leaflet-zoom-animated{transform-origin:0 0}.leaflet-control-container{position:absolute;inset:0;pointer-events:none}.leaflet-bottom{position:absolute;bottom:0}.leaflet-right{right:0}.leaflet-control{pointer-events:auto}.leaflet-control-attribution{margin:0 5px 4px 0;padding:2px 5px;border-radius:5px;background:rgba(3,8,16,.65);color:#93a4bb;font-size:9px}.leaflet-control-attribution a{color:#b9c8dd}.leaflet-marker-icon{display:block}
-        .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(2,6,14,.65),transparent 27%,transparent 66%,rgba(2,6,14,.88))}.header{position:absolute;top:14px;left:16px;right:16px;pointer-events:none}.title{font:700 16px system-ui}.region{margin-top:3px;color:#b9c7db;font:600 11px system-ui;text-transform:uppercase;letter-spacing:.12em}
+        :host{display:block}
+        ha-card{position:relative;height:${height}px;overflow:hidden;border-radius:16px;color:#fff;background:#07101d}
+        .viewport{position:absolute;inset:0;overflow:hidden;background:#07101d}
+        .scene{position:absolute;inset:-14%;transform-origin:50% 50%;will-change:transform;transition:transform 1.4s cubic-bezier(.2,.75,.2,1)}
+        .map{position:absolute;inset:0;background:#07101d}
+        .leaflet-container{overflow:hidden;outline:0;background:#07101d;font-family:system-ui}
+        .leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box{position:absolute;left:0;top:0}
+        .leaflet-container img.leaflet-tile{max-width:none!important;max-height:none!important;width:256px;height:256px}
+        .leaflet-tile{visibility:hidden}.leaflet-tile-loaded{visibility:inherit}
+        .leaflet-zoom-animated{transform-origin:0 0}
+        .leaflet-control-container{position:absolute;inset:0;pointer-events:none}
+        .leaflet-bottom{position:absolute;bottom:0}.leaflet-right{right:0}
+        .leaflet-control{pointer-events:auto}
+        .leaflet-control-attribution{margin:0 5px 4px 0;padding:2px 5px;border-radius:5px;background:rgba(3,8,16,.65);color:#93a4bb;font-size:9px}
+        .leaflet-control-attribution a{color:#b9c8dd}
+        .leaflet-marker-icon{display:block}
+        .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(2,6,14,.65),transparent 27%,transparent 66%,rgba(2,6,14,.88))}
+        .header{position:absolute;top:14px;left:16px;right:16px;pointer-events:none}
+        .title{font:700 16px system-ui}
+        .region{margin-top:3px;color:#b9c7db;font:600 11px system-ui;text-transform:uppercase;letter-spacing:.12em}
         .clear{position:absolute;left:16px;bottom:16px;padding:10px 12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(5,10,20,.78);color:#c7d2e3;font:600 12px system-ui;backdrop-filter:blur(12px)}
-        .panel{position:absolute;left:16px;right:16px;bottom:14px;display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 16px;border:1px solid color-mix(in srgb,var(--severity) 70%,transparent);border-radius:14px;background:rgba(5,10,20,.9);backdrop-filter:blur(12px)}.badge{width:42px;height:42px;display:grid;place-items:center;border-radius:11px;color:var(--severity);background:color-mix(in srgb,var(--severity) 18%,#07101d);font-size:23px}.severity{color:var(--severity);font:800 10px system-ui;letter-spacing:.11em}.type{font:800 13px system-ui}.headline{margin-top:3px;font:600 13px system-ui}.meta{margin-top:4px;color:#aab7ca;font:500 11px system-ui}.controls{display:flex;gap:6px}.control{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:9px;color:#fff;background:rgba(255,255,255,.08);cursor:pointer}
-        .incident-pin{width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:50% 50% 50% 7px;transform:rotate(-45deg);color:#fff;background:var(--pin-colour);box-shadow:0 0 0 6px color-mix(in srgb,var(--pin-colour) 25%,transparent),0 8px 22px #0009}.incident-pin span{transform:rotate(45deg);font-size:18px}.home-pin{width:30px;height:30px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;color:#fff;background:#07101d;box-shadow:0 5px 18px #0009;font-size:17px}.home-pin.inside{border-color:#ff414b;box-shadow:0 0 0 7px rgba(255,65,75,.22),0 5px 18px #0009}
-        .status{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:24px;text-align:center;color:#fff;background:#07101d;font:600 13px system-ui}.status small{display:block;margin-top:10px;color:#8fb4df;font-weight:500}
+        .panel{position:absolute;left:16px;right:16px;bottom:14px;display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 16px;border:1px solid color-mix(in srgb,var(--severity) 70%,transparent);border-radius:14px;background:rgba(5,10,20,.9);backdrop-filter:blur(12px)}
+        .badge{width:42px;height:42px;display:grid;place-items:center;border-radius:11px;color:var(--severity);background:color-mix(in srgb,var(--severity) 18%,#07101d);font-size:23px}
+        .severity{color:var(--severity);font:800 10px system-ui;letter-spacing:.11em}
+        .type{font:800 13px system-ui}
+        .headline{margin-top:3px;font:600 13px system-ui}
+        .meta{margin-top:4px;color:#aab7ca;font:500 11px system-ui}
+        .controls{display:flex;gap:6px}
+        .control{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:9px;color:#fff;background:rgba(255,255,255,.08);cursor:pointer}
+        .incident-pin{width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:50% 50% 50% 7px;transform:rotate(-45deg);color:#fff;background:var(--pin-colour);box-shadow:0 0 0 6px color-mix(in srgb,var(--pin-colour) 25%,transparent),0 8px 22px #0009}
+        .incident-pin span{transform:rotate(45deg);font-size:18px}
+        /* Animated home beacon */
+        .beacon{width:28px;height:28px;position:relative}
+        .beacon-core{position:absolute;inset:6px;border-radius:50%;background:#fff;box-shadow:0 0 10px #fff}
+        .beacon-ring{position:absolute;inset:0;border-radius:50%;border:2px solid #fff;opacity:0;animation:beaconPulse 2.4s ease-out infinite}
+        .beacon-ring:nth-child(2){animation-delay:1.2s}
+        .beacon.danger .beacon-core{background:#ff414b;box-shadow:0 0 12px #ff414b}
+        .beacon.danger .beacon-ring{border-color:#ff414b}
+        @keyframes beaconPulse{0%{transform:scale(0.4);opacity:0.85}100%{transform:scale(2.6);opacity:0}}
+        .status{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:24px;text-align:center;color:#fff;background:#07101d;font:600 13px system-ui}
+        .status small{display:block;margin-top:10px;color:#8fb4df;font-weight:500}
         @media(max-width:650px){.panel{grid-template-columns:36px minmax(0,1fr)}.badge{width:36px;height:36px}.controls{grid-column:1/-1;justify-content:flex-end}}
       </style>
       <ha-card>
@@ -328,15 +356,24 @@ class EmergencyOrbitMapCard extends HTMLElement {
         <div class="header"><div class="title">${escapeHtml(this._config.title)}</div><div class="region"></div></div>
         <div class="clear">No active emergency incidents</div>
         <div class="panel" hidden><div class="badge"></div><div><div><span class="severity"></span> · <span class="type"></span></div><div class="headline"></div><div class="meta"></div></div><div class="controls"><button class="control" data-action="overview">Overview</button><button class="control" data-action="orbit">Orbit</button></div></div>
-        <div class="status"><div>Loading worker-free map engine…<small>Card ${VERSION}</small></div></div>
+        <div class="status"><div>Loading map…<small>Card ${VERSION}</small></div></div>
       </ha-card>`;
 
     this._elements = {
-      scene: this.shadowRoot.querySelector('.scene'), map: this.shadowRoot.querySelector('.map'), region: this.shadowRoot.querySelector('.region'), clear: this.shadowRoot.querySelector('.clear'), panel: this.shadowRoot.querySelector('.panel'), badge: this.shadowRoot.querySelector('.badge'), severity: this.shadowRoot.querySelector('.severity'), type: this.shadowRoot.querySelector('.type'), headline: this.shadowRoot.querySelector('.headline'), meta: this.shadowRoot.querySelector('.meta'), status: this.shadowRoot.querySelector('.status'),
+      scene: this.shadowRoot.querySelector('.scene'),
+      map: this.shadowRoot.querySelector('.map'),
+      region: this.shadowRoot.querySelector('.region'),
+      clear: this.shadowRoot.querySelector('.clear'),
+      panel: this.shadowRoot.querySelector('.panel'),
+      badge: this.shadowRoot.querySelector('.badge'),
+      severity: this.shadowRoot.querySelector('.severity'),
+      type: this.shadowRoot.querySelector('.type'),
+      headline: this.shadowRoot.querySelector('.headline'),
+      meta: this.shadowRoot.querySelector('.meta'),
+      status: this.shadowRoot.querySelector('.status'),
     };
     this.shadowRoot.querySelector('[data-action="overview"]').addEventListener('click', () => this._showOverview(true));
     this.shadowRoot.querySelector('[data-action="orbit"]').addEventListener('click', () => this._focusIncident(this._incidents.find((item) => item.id === this._selectedId) ?? this._incidents[0], true));
-    this._applySceneTransform(this._config.map.overview_pitch, this._config.map.overview_bearing, 1.16, false);
   }
 
   _setStatus(message, detail = '') {
@@ -348,19 +385,15 @@ class EmergencyOrbitMapCard extends HTMLElement {
 
   async _initialise() {
     if (this._map || this._initialising || !this._elements?.map) return;
-    // Leaflet stamps the container with _leaflet_id once initialized
     if (this._elements.map._leaflet_id) return;
     this._initialising = true;
     try {
-      this._setStatus('Loading worker-free map engine…', 'Using Home Assistant Leaflet…');
+      this._setStatus('Loading map…', `Card ${VERSION}`);
       this._leaflet = await loadLeaflet();
       console.info(`[${TAG}] Leaflet ready`, this._leaflet && this._leaflet.version);
-      // Re-check after await — another call may have finished first
       if (this._map || this._elements.map._leaflet_id) return;
       const region = getRegion(this._config, this._hass);
       this._elements.region.textContent = region.label;
-      // Must provide center + zoom before any flyTo/flyToBounds
-      // otherwise Leaflet throws "Set map center and zoom first."
       const initialLat = region.centre[1];
       const initialLng = region.centre[0];
       this._map = this._leaflet.map(this._elements.map, {
@@ -389,13 +422,13 @@ class EmergencyOrbitMapCard extends HTMLElement {
       }).addTo(this._map);
       this._ready = true;
       this._hideStatus();
-      this._createHomeMarker(region);
+      this._createHomeBeacon(region);
       this._map.invalidateSize(false);
       this._showOverview(false);
       window.setTimeout(() => {
         this._map?.invalidateSize(false);
         this._updateIncidents();
-      }, 120);
+      }, 150);
     } catch (error) {
       console.error(`[${TAG}]`, error);
       this._setStatus('Emergency map failed to start.', error.message);
@@ -404,18 +437,39 @@ class EmergencyOrbitMapCard extends HTMLElement {
     }
   }
 
-  _createHomeMarker(region) {
+  _createHomeBeacon(region) {
     if (!this._config.display.show_home) return;
     const inside = this._hass?.states?.[this._config.entities.inside_polygon]?.state === 'on';
-    const icon = this._leaflet.divIcon({ className: '', html: `<div class="home-pin${inside ? ' inside' : ''}">⌂</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
-    this._homeMarker = this._leaflet.marker([numberValue(this._hass?.config?.latitude) ?? region.centre[1], numberValue(this._hass?.config?.longitude) ?? region.centre[0]], { icon, interactive: false, zIndexOffset: 900 }).addTo(this._map);
+    const html = `<div class="beacon${inside ? ' danger' : ''}"><div class="beacon-ring"></div><div class="beacon-ring"></div><div class="beacon-core"></div></div>`;
+    const icon = this._leaflet.divIcon({ className: '', html, iconSize: [28, 28], iconAnchor: [14, 14] });
+    this._homeMarker = this._leaflet.marker(
+      [numberValue(this._hass?.config?.latitude) ?? region.centre[1], numberValue(this._hass?.config?.longitude) ?? region.centre[0]],
+      { icon, interactive: false, zIndexOffset: 900 }
+    ).addTo(this._map);
+  }
+
+  _updateHomeBeacon() {
+    if (!this._homeMarker) return;
+    const inside = this._hass?.states?.[this._config.entities.inside_polygon]?.state === 'on';
+    const html = `<div class="beacon${inside ? ' danger' : ''}"><div class="beacon-ring"></div><div class="beacon-ring"></div><div class="beacon-core"></div></div>`;
+    this._homeMarker.setIcon(this._leaflet.divIcon({ className: '', html, iconSize: [28, 28], iconAnchor: [14, 14] }));
   }
 
   _collectIncidents() {
     if (this._config.demo_mode) {
       const region = getRegion(this._config, this._hass);
       const samples = [['Bushfire', 'severe'], ['Flood', 'moderate'], ['Storm Warning', 'extreme'], ['Traffic Incident', 'minor']];
-      return samples.map(([type, level], index) => ({ id: `demo-${index}`, type, level, headline: `Demonstration ${type.toLowerCase()} incident`, point: destination(region.centre, 35 + index * 82, 8 + index * 5), distance: 8 + index * 5, direction: 'inside the selected region', status: 'Demo data', geometry: null }));
+      return samples.map(([type, level], index) => ({
+        id: `demo-${index}`,
+        type,
+        level,
+        headline: `Demonstration ${type.toLowerCase()} incident`,
+        point: destination(region.centre, 35 + index * 82, 8 + index * 5),
+        distance: 8 + index * 5,
+        direction: 'inside the selected region',
+        status: 'Demo data',
+        geometry: null,
+      }));
     }
 
     const entities = this._config.entities;
@@ -430,7 +484,8 @@ class EmergencyOrbitMapCard extends HTMLElement {
       const type = clean(attributes.event_type ?? raw.event_type ?? 'Emergency incident');
       if (this._config.display.hide_non_urgent && type.toLowerCase() === 'other non-urgent alerts') return null;
       return {
-        id: String(raw.id ?? generatedId ?? index), type,
+        id: String(raw.id ?? generatedId ?? index),
+        type,
         level: normaliseLevel(attributes.alert_level ?? raw.alert_level),
         headline: clean(attributes.headline ?? attributes.friendly_name ?? raw.headline ?? 'Incident details updating'),
         point: extractPoint(attributes) ?? extractPoint(raw),
@@ -445,7 +500,19 @@ class EmergencyOrbitMapCard extends HTMLElement {
       const nearest = this._hass?.states?.[entities.nearest];
       const attributes = nearest?.attributes ?? {};
       const point = extractPoint(attributes);
-      if (nearest && point) incidents.push({ id: nearest.entity_id, type: clean(attributes.event_type ?? 'Emergency incident'), level: normaliseLevel(attributes.alert_level), headline: clean(attributes.headline ?? attributes.friendly_name ?? 'Incident details updating'), point, distance: numberValue(nearest.state), direction: clean(attributes.direction), status: clean(attributes.status), geometry: extractGeometry(attributes) });
+      if (nearest && point) {
+        incidents.push({
+          id: nearest.entity_id,
+          type: clean(attributes.event_type ?? 'Emergency incident'),
+          level: normaliseLevel(attributes.alert_level),
+          headline: clean(attributes.headline ?? attributes.friendly_name ?? 'Incident details updating'),
+          point,
+          distance: numberValue(nearest.state),
+          direction: clean(attributes.direction),
+          status: clean(attributes.status),
+          geometry: extractGeometry(attributes),
+        });
+      }
     }
 
     return incidents.sort((left, right) => LEVELS[right.level].rank - LEVELS[left.level].rank || (left.distance ?? 99999) - (right.distance ?? 99999));
@@ -459,16 +526,10 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this._previousLevels = new Map(incidents.map((incident) => [incident.id, incident.level]));
     if (this._ready) {
       this._drawLayers();
-      this._updateHomeState();
+      this._updateHomeBeacon();
     }
     const important = incidents.find((incident) => !previous.has(incident.id) || LEVELS[incident.level].rank > LEVELS[previous.get(incident.id) ?? 'none'].rank);
     if (important && this._ready) this._focusIncident(important, true);
-  }
-
-  _updateHomeState() {
-    if (!this._homeMarker) return;
-    const inside = this._hass?.states?.[this._config.entities.inside_polygon]?.state === 'on';
-    this._homeMarker.setIcon(this._leaflet.divIcon({ className: '', html: `<div class="home-pin${inside ? ' inside' : ''}">⌂</div>`, iconSize: [30, 30], iconAnchor: [15, 15] }));
   }
 
   _drawLayers() {
@@ -476,9 +537,19 @@ class EmergencyOrbitMapCard extends HTMLElement {
     for (const incident of this._incidents) {
       const severity = LEVELS[incident.level];
       let item = this._layers.get(incident.id);
-      const markerIcon = this._leaflet.divIcon({ className: '', html: `<div class="incident-pin" style="--pin-colour:${severity.colour}"><span>${incidentIcon(incident.type)}</span></div>`, iconSize: [38, 38], iconAnchor: [19, 38] });
+      const markerIcon = this._leaflet.divIcon({
+        className: '',
+        html: `<div class="incident-pin" style="--pin-colour:${severity.colour}"><span>${incidentIcon(incident.type)}</span></div>`,
+        iconSize: [38, 38],
+        iconAnchor: [19, 38],
+      });
       if (!item) {
-        const marker = this._leaflet.marker([incident.point[1], incident.point[0]], { icon: markerIcon, keyboard: true, title: incident.headline, zIndexOffset: 1000 + severity.rank * 100 }).addTo(this._map);
+        const marker = this._leaflet.marker([incident.point[1], incident.point[0]], {
+          icon: markerIcon,
+          keyboard: true,
+          title: incident.headline,
+          zIndexOffset: 1000 + severity.rank * 100,
+        }).addTo(this._map);
         marker.on('click', () => this._focusIncident(incident, true));
         item = { marker, polygon: null, geometryKey: '' };
         this._layers.set(incident.id, item);
@@ -493,14 +564,22 @@ class EmergencyOrbitMapCard extends HTMLElement {
         item.geometryKey = geometryKey;
         if (incident.geometry) {
           try {
-            item.polygon = this._leaflet.geoJSON(incident.geometry, { style: { color: severity.colour, weight: 3, opacity: 0.9, fillColor: severity.colour, fillOpacity: 0.17 } }).addTo(this._map);
-          } catch (error) { console.warn(`[${TAG}] Invalid polygon for ${incident.id}`, error); }
+            item.polygon = this._leaflet.geoJSON(incident.geometry, {
+              style: { color: severity.colour, weight: 3, opacity: 0.9, fillColor: severity.colour, fillOpacity: 0.17 },
+            }).addTo(this._map);
+          } catch (error) {
+            console.warn(`[${TAG}] Invalid polygon for ${incident.id}`, error);
+          }
         }
       }
     }
 
     for (const [id, item] of this._layers) {
-      if (!active.has(id)) { item.marker.remove(); item.polygon?.remove(); this._layers.delete(id); }
+      if (!active.has(id)) {
+        item.marker.remove();
+        item.polygon?.remove();
+        this._layers.delete(id);
+      }
     }
     this._elements.clear.hidden = !this._config.display.show_clear_state || this._incidents.length > 0;
     if (!this._incidents.length) this._elements.panel.hidden = true;
@@ -518,13 +597,26 @@ class EmergencyOrbitMapCard extends HTMLElement {
       this._elements.severity.textContent = severity.label;
       this._elements.type.textContent = incident.type.toUpperCase();
       this._elements.headline.textContent = incident.headline;
-      this._elements.meta.textContent = [Number.isFinite(incident.distance) ? `${incident.distance.toFixed(1)} km` : '', incident.direction, incident.status].filter(Boolean).join(' · ');
+      this._elements.meta.textContent = [
+        Number.isFinite(incident.distance) ? `${incident.distance.toFixed(1)} km` : '',
+        incident.direction,
+        incident.status,
+      ].filter(Boolean).join(' · ');
     }
-    this._applySceneTransform(this._config.map.incident_pitch, this._bearing, 1.24, true);
+    this._applySceneTransform(this._config.map.incident_pitch, this._bearing, 1.22, true);
     const token = ++this._animationToken;
     const layer = this._layers.get(incident.id);
-    if (layer?.polygon) this._map.flyToBounds(layer.polygon.getBounds(), { padding: [90, 90], maxZoom: numberValue(this._config.map.incident_zoom) ?? 14, duration: animate ? numberValue(this._config.camera.fly_duration) ?? 3.2 : 0 });
-    else this._map.flyTo([incident.point[1], incident.point[0]], numberValue(this._config.map.incident_zoom) ?? 14, { duration: animate ? numberValue(this._config.camera.fly_duration) ?? 3.2 : 0 });
+    if (layer?.polygon) {
+      this._map.flyToBounds(layer.polygon.getBounds(), {
+        padding: [90, 90],
+        maxZoom: numberValue(this._config.map.incident_zoom) ?? 14,
+        duration: animate ? numberValue(this._config.camera.fly_duration) ?? 2.8 : 0,
+      });
+    } else {
+      this._map.flyTo([incident.point[1], incident.point[0]], numberValue(this._config.map.incident_zoom) ?? 14, {
+        duration: animate ? numberValue(this._config.camera.fly_duration) ?? 2.8 : 0,
+      });
+    }
     const startOrbit = () => {
       this._map.off('moveend', startOrbit);
       if (token !== this._animationToken) return;
@@ -536,22 +628,27 @@ class EmergencyOrbitMapCard extends HTMLElement {
 
   _orbitIncident(incident, token) {
     const start = performance.now();
-    const duration = Math.max(6000, numberValue(this._config.camera.orbit_duration) ?? 22000);
+    const duration = Math.max(8000, numberValue(this._config.camera.orbit_duration) ?? 18000);
     const initialBearing = this._bearing;
     const frame = (now) => {
       if (token !== this._animationToken) return;
       const progress = Math.min(1, (now - start) / duration);
       const eased = progress < 0.5 ? 2 * progress * progress : 1 - ((-2 * progress + 2) ** 2) / 2;
-      this._applySceneTransform(this._config.map.incident_pitch, initialBearing + 360 * eased, 1.24, false);
+      this._applySceneTransform(this._config.map.incident_pitch, initialBearing + 360 * eased, 1.22, false);
       if (progress < 1) this._orbitFrame = requestAnimationFrame(frame);
-      else { this._bearing = ((initialBearing + 360) % 360 + 360) % 360; this._scheduleReturn(token); }
+      else {
+        this._bearing = ((initialBearing + 360) % 360 + 360) % 360;
+        this._scheduleReturn(token);
+      }
     };
     this._orbitFrame = requestAnimationFrame(frame);
   }
 
   _scheduleReturn(token) {
     if (!this._config.camera.auto_return) return;
-    this._returnTimer = window.setTimeout(() => { if (token === this._animationToken) this._showOverview(true); }, numberValue(this._config.camera.auto_return_delay) ?? 30000);
+    this._returnTimer = window.setTimeout(() => {
+      if (token === this._animationToken) this._showOverview(true);
+    }, numberValue(this._config.camera.auto_return_delay) ?? 4000);
   }
 
   _showOverview(animate) {
@@ -568,14 +665,19 @@ class EmergencyOrbitMapCard extends HTMLElement {
     }
     this._bearing = numberValue(this._config.map.overview_bearing) ?? -18;
     this._pitch = numberValue(this._config.map.overview_pitch) ?? 42;
-    this._applySceneTransform(this._pitch, this._bearing, 1.16, animate);
-    this._map.flyToBounds(bounds, { padding: [70, 70], maxZoom: 12, duration: animate ? 1.8 : 0 });
+    this._applySceneTransform(this._pitch, this._bearing, 1.12, animate);
+    this._map.flyToBounds(bounds, {
+      padding: [70, 70],
+      maxZoom: 12,
+      duration: animate ? 1.8 : 0,
+    });
   }
 
   _applySceneTransform(pitch, bearing, scale, transition) {
     this._pitch = numberValue(pitch) ?? 42;
     this._bearing = numberValue(bearing) ?? -18;
-    this._elements.scene.style.transition = transition ? 'transform 1.5s cubic-bezier(.2,.75,.2,1)' : 'none';
+    if (!this._elements?.scene) return;
+    this._elements.scene.style.transition = transition ? 'transform 1.4s cubic-bezier(.2,.75,.2,1)' : 'none';
     this._elements.scene.style.transform = `perspective(1400px) rotateX(${this._pitch}deg) rotateZ(${this._bearing}deg) scale(${scale})`;
   }
 
@@ -591,6 +693,10 @@ class EmergencyOrbitMapCard extends HTMLElement {
 if (!customElements.get(TAG)) customElements.define(TAG, EmergencyOrbitMapCard);
 window.customCards = window.customCards || [];
 if (!window.customCards.some((card) => card.type === TAG)) {
-  window.customCards.push({ type: TAG, name: 'Emergency Orbit Map Card', description: 'Worker-free emergency map with live incidents, polygons, fly-in and orbit camera.' });
+  window.customCards.push({
+    type: TAG,
+    name: 'Emergency Orbit Map Card',
+    description: 'Emergency map with CSS 3D orbit, animated home beacon, live incidents and ABC Emergency support.',
+  });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.2.3 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.0 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
