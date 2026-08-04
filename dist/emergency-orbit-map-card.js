@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.3.3 - CSS 3D orbit + animated beacon + interactive map */
+/* Emergency Orbit Map Card v0.3.4 - interactive pan/zoom + orbit on demand */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.3.3';
+const VERSION = '0.3.4';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -33,8 +33,8 @@ const DEFAULTS = {
     tile_url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     tile_attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     tile_subdomains: 'abcd',
-    overview_pitch: 42,
-    overview_bearing: -18,
+    overview_pitch: 0,
+    overview_bearing: 0,
     incident_pitch: 58,
     incident_zoom: 14,
     max_zoom: 19,
@@ -226,9 +226,7 @@ const loadScript = (url) => new Promise((resolve, reject) => {
 });
 
 const loadLeaflet = () => {
-  if (window.L && typeof window.L.map === 'function') {
-    return Promise.resolve(window.L);
-  }
+  if (window.L && typeof window.L.map === 'function') return Promise.resolve(window.L);
   if (leafletPromise) return leafletPromise;
   leafletPromise = (async () => {
     for (let i = 0; i < 30; i++) {
@@ -265,8 +263,8 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this._orbitFrame = 0;
     this._returnTimer = 0;
     this._updateFrame = 0;
-    this._bearing = DEFAULTS.map.overview_bearing;
-    this._pitch = DEFAULTS.map.overview_pitch;
+    this._bearing = 0;
+    this._pitch = 0;
   }
 
   setConfig(config) {
@@ -315,9 +313,11 @@ class EmergencyOrbitMapCard extends HTMLElement {
         :host{display:block}
         ha-card{position:relative;height:${height}px;overflow:hidden;border-radius:16px;color:#fff;background:#07101d}
         .viewport{position:absolute;inset:0;overflow:hidden;background:#07101d}
-        .scene{position:absolute;inset:-14%;transform-origin:50% 50%;will-change:transform;transition:transform 1.4s cubic-bezier(.2,.75,.2,1)}
+        .scene{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform;transition:transform 1.4s cubic-bezier(.2,.75,.2,1)}
+        .scene.is-tilted{inset:-14%}
         .map{position:absolute;inset:0;background:#07101d}
-        .leaflet-container{overflow:hidden;outline:0;background:#07101d;font-family:system-ui}
+        .leaflet-container{overflow:hidden;outline:0;background:#07101d;font-family:system-ui;cursor:grab}
+        .leaflet-dragging .leaflet-container{cursor:grabbing}
         .leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box{position:absolute;left:0;top:0}
         .leaflet-container img.leaflet-tile{max-width:none!important;max-height:none!important;width:256px;height:256px}
         .leaflet-tile{visibility:hidden}.leaflet-tile-loaded{visibility:inherit}
@@ -334,7 +334,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
         .leaflet-control-attribution{margin:0 5px 4px 0;padding:2px 5px;border-radius:5px;background:rgba(3,8,16,.65);color:#93a4bb;font-size:9px}
         .leaflet-control-attribution a{color:#b9c8dd}
         .leaflet-marker-icon{display:block}
-        .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(2,6,14,.65),transparent 27%,transparent 66%,rgba(2,6,14,.88))}
+        .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(2,6,14,.55),transparent 24%,transparent 70%,rgba(2,6,14,.8))}
         .header{position:absolute;top:14px;left:16px;right:16px;pointer-events:none}
         .title{font:700 16px system-ui}
         .region{margin-top:3px;color:#b9c7db;font:600 11px system-ui;text-transform:uppercase;letter-spacing:.12em}
@@ -410,10 +410,8 @@ class EmergencyOrbitMapCard extends HTMLElement {
       if (this._map || this._elements.map._leaflet_id) return;
       const region = getRegion(this._config, this._hass);
       this._elements.region.textContent = region.label;
-      const initialLat = region.centre[1];
-      const initialLng = region.centre[0];
       this._map = this._leaflet.map(this._elements.map, {
-        center: [initialLat, initialLng],
+        center: [region.centre[1], region.centre[0]],
         zoom: 10,
         zoomControl: true,
         attributionControl: true,
@@ -439,6 +437,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
       this._map.on('dragstart zoomstart', () => this._stopCamera());
       this._ready = true;
       this._hideStatus();
+      this._flattenScene(false);
       this._createHomeBeacon(region);
       this._map.invalidateSize(false);
       this._showOverview(false);
@@ -605,7 +604,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
 
   _focusIncident(incident, animate) {
     if (!incident || !this._ready) return;
-    this._stopCamera();
+    this._stopCamera(false);
     this._selectedId = incident.id;
     const severity = LEVELS[incident.level];
     if (this._config.display.show_incident_panel) {
@@ -621,7 +620,6 @@ class EmergencyOrbitMapCard extends HTMLElement {
         incident.status,
       ].filter(Boolean).join(' · ');
     }
-    this._applySceneTransform(this._config.map.incident_pitch, this._bearing, 1.22, true);
     const token = ++this._animationToken;
     const layer = this._layers.get(incident.id);
     if (layer?.polygon) {
@@ -647,12 +645,13 @@ class EmergencyOrbitMapCard extends HTMLElement {
   _orbitIncident(incident, token) {
     const start = performance.now();
     const duration = Math.max(8000, numberValue(this._config.camera.orbit_duration) ?? 18000);
-    const initialBearing = this._bearing;
+    const initialBearing = -22;
+    this._applySceneTransform(numberValue(this._config.map.incident_pitch) ?? 58, initialBearing, 1.2, true);
     const frame = (now) => {
       if (token !== this._animationToken) return;
       const progress = Math.min(1, (now - start) / duration);
       const eased = progress < 0.5 ? 2 * progress * progress : 1 - ((-2 * progress + 2) ** 2) / 2;
-      this._applySceneTransform(this._config.map.incident_pitch, initialBearing + 360 * eased, 1.22, false);
+      this._applySceneTransform(numberValue(this._config.map.incident_pitch) ?? 58, initialBearing + 360 * eased, 1.2, false);
       if (progress < 1) this._orbitFrame = requestAnimationFrame(frame);
       else {
         this._bearing = ((initialBearing + 360) % 360 + 360) % 360;
@@ -671,7 +670,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
 
   _showOverview(animate) {
     if (!this._ready) return;
-    this._stopCamera();
+    this._stopCamera(true);
     this._selectedId = null;
     this._elements.panel.hidden = true;
     const region = getRegion(this._config, this._hass);
@@ -681,9 +680,6 @@ class EmergencyOrbitMapCard extends HTMLElement {
       const northeast = destination(region.centre, 45, region.radius);
       bounds = [[southwest[1], southwest[0]], [northeast[1], northeast[0]]];
     }
-    this._bearing = numberValue(this._config.map.overview_bearing) ?? -18;
-    this._pitch = numberValue(this._config.map.overview_pitch) ?? 42;
-    this._applySceneTransform(this._pitch, this._bearing, 1.12, animate);
     this._map.flyToBounds(bounds, {
       padding: [70, 70],
       maxZoom: 12,
@@ -691,20 +687,35 @@ class EmergencyOrbitMapCard extends HTMLElement {
     });
   }
 
-  _applySceneTransform(pitch, bearing, scale, transition) {
-    this._pitch = numberValue(pitch) ?? 42;
-    this._bearing = numberValue(bearing) ?? -18;
+  _flattenScene(transition = true) {
+    this._pitch = 0;
+    this._bearing = 0;
     if (!this._elements?.scene) return;
-    this._elements.scene.style.transition = transition ? 'transform 1.4s cubic-bezier(.2,.75,.2,1)' : 'none';
-    this._elements.scene.style.transform = `perspective(1400px) rotateX(${this._pitch}deg) rotateZ(${this._bearing}deg) scale(${scale})`;
+    this._elements.scene.classList.remove('is-tilted');
+    this._elements.scene.style.transition = transition ? 'transform 0.6s ease' : 'none';
+    this._elements.scene.style.transform = 'none';
   }
 
-  _stopCamera() {
+  _applySceneTransform(pitch, bearing, scale, transition) {
+    this._pitch = numberValue(pitch) ?? 0;
+    this._bearing = numberValue(bearing) ?? 0;
+    if (!this._elements?.scene) return;
+    if (!this._pitch && !this._bearing) {
+      this._flattenScene(transition);
+      return;
+    }
+    this._elements.scene.classList.add('is-tilted');
+    this._elements.scene.style.transition = transition ? 'transform 1.4s cubic-bezier(.2,.75,.2,1)' : 'none';
+    this._elements.scene.style.transform = `perspective(1400px) rotateX(${this._pitch}deg) rotateZ(${this._bearing}deg) scale(${scale ?? 1.2})`;
+  }
+
+  _stopCamera(flatten = true) {
     this._animationToken += 1;
     cancelAnimationFrame(this._orbitFrame);
     clearTimeout(this._returnTimer);
     this._orbitFrame = 0;
     this._returnTimer = 0;
+    if (flatten) this._flattenScene(true);
   }
 }
 
@@ -714,7 +725,7 @@ if (!window.customCards.some((card) => card.type === TAG)) {
   window.customCards.push({
     type: TAG,
     name: 'Emergency Orbit Map Card',
-    description: 'Emergency map with CSS 3D orbit, animated home beacon, live incidents and ABC Emergency support.',
+    description: 'Emergency map with interactive pan/zoom, CSS 3D orbit, animated home beacon and ABC Emergency support.',
   });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.3 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.4 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
