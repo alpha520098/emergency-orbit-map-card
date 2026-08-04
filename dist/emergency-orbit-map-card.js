@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.3.2 - CSS 3D orbit + animated beacon */
+/* Emergency Orbit Map Card v0.3.3 - CSS 3D orbit + animated beacon + interactive map */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.3.2';
+const VERSION = '0.3.3';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -323,8 +323,14 @@ class EmergencyOrbitMapCard extends HTMLElement {
         .leaflet-tile{visibility:hidden}.leaflet-tile-loaded{visibility:inherit}
         .leaflet-zoom-animated{transform-origin:0 0}
         .leaflet-control-container{position:absolute;inset:0;pointer-events:none}
-        .leaflet-bottom{position:absolute;bottom:0}.leaflet-right{right:0}
-        .leaflet-control{pointer-events:auto}
+        .leaflet-top{position:absolute;top:0}.leaflet-bottom{position:absolute;bottom:0}.leaflet-right{right:0}.leaflet-left{left:0}
+        .leaflet-control{pointer-events:auto;float:left;clear:both}
+        .leaflet-bar{box-shadow:0 1px 5px rgba(0,0,0,.4);border-radius:4px}
+        .leaflet-bar a{background:#fff;border-bottom:1px solid #ccc;width:30px;height:30px;line-height:30px;display:block;text-align:center;text-decoration:none;color:#000}
+        .leaflet-bar a:hover{background:#f4f4f4}
+        .leaflet-bar a:first-child{border-top-left-radius:4px;border-top-right-radius:4px}
+        .leaflet-bar a:last-child{border-bottom-left-radius:4px;border-bottom-right-radius:4px;border-bottom:none}
+        .leaflet-control-zoom{margin:70px 10px 0 0}
         .leaflet-control-attribution{margin:0 5px 4px 0;padding:2px 5px;border-radius:5px;background:rgba(3,8,16,.65);color:#93a4bb;font-size:9px}
         .leaflet-control-attribution a{color:#b9c8dd}
         .leaflet-marker-icon{display:block}
@@ -409,18 +415,18 @@ class EmergencyOrbitMapCard extends HTMLElement {
       this._map = this._leaflet.map(this._elements.map, {
         center: [initialLat, initialLng],
         zoom: 10,
-        zoomControl: false,
+        zoomControl: true,
         attributionControl: true,
         preferCanvas: true,
         zoomAnimation: true,
         fadeAnimation: true,
         markerZoomAnimation: true,
-        dragging: false,
-        touchZoom: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        boxZoom: false,
-        keyboard: false,
+        dragging: true,
+        touchZoom: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        boxZoom: true,
+        keyboard: true,
         worldCopyJump: true,
       });
       this._leaflet.tileLayer(this._config.map.tile_url, {
@@ -430,6 +436,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
         updateWhenIdle: false,
         keepBuffer: 3,
       }).addTo(this._map);
+      this._map.on('dragstart zoomstart', () => this._stopCamera());
       this._ready = true;
       this._hideStatus();
       this._createHomeBeacon(region);
@@ -710,4 +717,4 @@ if (!window.customCards.some((card) => card.type === TAG)) {
     description: 'Emergency map with CSS 3D orbit, animated home beacon, live incidents and ABC Emergency support.',
   });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.2 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.3 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
