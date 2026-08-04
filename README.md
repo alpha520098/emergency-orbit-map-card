@@ -1,83 +1,66 @@
 # Emergency Orbit Map Card
 
-A Home Assistant dashboard card that displays live emergency incidents, flies to new or escalated events, renders supplied incident polygons, and performs a controlled helicopter-style orbit.
+A Home Assistant dashboard card that shows live emergency incidents with a cinematic **CSS 3D orbit**, animated **home beacon**, and support for the [ABC Emergency](https://github.com/troykelly/homeassistant-abcemergency) integration.
 
-## Current status
+**Version:** `0.3.0`
 
-**Version:** `0.2.0-alpha`
+## Features
 
-This release replaces MapLibre with a worker-free Leaflet renderer. The earlier MapLibre builds stalled inside some Home Assistant frontends while starting their Web Worker. Leaflet does not require a Web Worker, so the card now starts without the CSP and worker dependency that caused the permanent loading screen.
+- Uses your Home Assistant **home location** as the map centre
+- Animated pulsing **beacon** for home (turns red when inside an active polygon)
+- CSS 3D pitched view + orbit around new / escalated incidents
+- Configurable ABC Emergency entities (works for any user)
+- Demo mode so you can test without the integration
+- Incident card with severity colours and distance
+- Auto-return to regional overview after orbit
 
-The pitched view is produced with CSS perspective and rotation. It is a convincing operational 3D-style view, but it is not a true terrain elevation mesh. The important parts remain: live incidents, polygons, fly-in, orbit, region selection and automatic return.
+## Installation (HACS)
 
-## Installation through HACS
-
-1. Open **HACS → Dashboard**.
-2. Open the three-dot menu and select **Custom repositories**.
+1. Open **HACS → Dashboard**
+2. Three-dot menu → **Custom repositories**
 3. Add:
 
-   ```text
-   https://github.com/alpha520098/emergency-orbit-map-card
-   ```
+```text
+https://github.com/alpha520098/emergency-orbit-map-card
+```
 
-4. Select **Dashboard** as the category.
-5. Install or redownload **Emergency Orbit Map Card**.
-6. Restart Home Assistant and hard-refresh the browser.
+4. Category: **Dashboard**
+5. Install **Emergency Orbit Map Card**
+6. Restart Home Assistant
+7. Hard-refresh the browser (`Ctrl + Shift + R`)
 
-The installed dashboard resource should be:
+Resource path after install:
 
 ```text
 /hacsfiles/emergency-orbit-map-card/emergency-orbit-map-card.js
 ```
 
-For a forced cache refresh, temporarily use:
-
-```text
-/hacsfiles/emergency-orbit-map-card/emergency-orbit-map-card.js?v=0.2.0
-```
-
-## First test
-
-Use demo mode before connecting the real incident entities:
+## Quick start – Demo mode
 
 ```yaml
 type: custom:emergency-orbit-map-card
 title: Emergency Orbit Test
-
+demo_mode: true
 region:
   mode: home
-  label: Macarthur
+  label: My Area
   radius_km: 40
-
 map:
   height: 520
-  overview_pitch: 42
-  overview_bearing: -18
-  incident_pitch: 58
-  incident_zoom: 14
-
 camera:
   orbit: true
-  orbit_duration: 22000
-  auto_return: false
-
-demo_mode: true
+  auto_return: true
 ```
 
-During startup the card should briefly show:
-
-```text
-Loading worker-free map engine…
-Card 0.2.0-alpha
-```
-
-It should then display four simulated incidents around the Home Assistant location.
+This generates sample incidents around your Home Assistant home location so you can test the fly-to and orbit.
 
 ## Live ABC Emergency configuration
 
+Replace the entity IDs with the ones from your own ABC Emergency integration:
+
 ```yaml
 type: custom:emergency-orbit-map-card
-title: Macarthur Emergency Map
+title: Emergency Map
 
 entities:
   incidents: sensor.abc_emergency_home_nearby_incidents
@@ -93,42 +76,27 @@ region:
 map:
   height: 520
   overview_pitch: 42
-  overview_bearing: -18
   incident_pitch: 58
-  incident_zoom: 14
+  incident_zoom: 13.5
 
 camera:
   orbit: true
-  orbit_duration: 22000
-  fly_duration: 3.2
+  orbit_duration: 18000
+  fly_duration: 2.8
   auto_return: true
-  auto_return_delay: 30000
+  auto_return_delay: 4000
 
 demo_mode: false
 ```
 
-## Features
+## Region options
 
-- Worker-free map renderer.
-- Home, custom-centre and explicit-bounds region modes.
-- Direct monitoring of the nearby-incidents attribute.
-- Generated geolocation entity support.
-- New-incident and warning-escalation focus.
-- Point markers and supplied GeoJSON or polygon geometry.
-- WKT polygon support.
-- Cinematic fly-in and helicopter-style orbit.
-- Automatic return to the regional overview.
-- Home-inside-polygon warning state.
-- Demo mode for installation testing.
-
-## Region modes
-
-### Home Assistant location
+### Use Home Assistant home location (default)
 
 ```yaml
 region:
   mode: home
-  label: Macarthur
+  label: My Area
   radius_km: 40
 ```
 
@@ -137,74 +105,45 @@ region:
 ```yaml
 region:
   mode: custom
-  label: Newcastle and Lower Hunter
+  label: Newcastle
   latitude: -32.9283
   longitude: 151.7817
   radius_km: 50
 ```
 
-### Explicit bounds
+## Camera options
 
 ```yaml
-region:
-  mode: bounds
-  label: Defined operational area
-  north: -33.85
-  south: -34.25
-  east: 151.05
-  west: 150.50
+camera:
+  orbit: true                 # enable CSS 3D orbit
+  orbit_duration: 18000       # ms
+  fly_duration: 2.8           # seconds
+  auto_return: true
+  auto_return_delay: 4000     # ms after orbit finishes
 ```
 
-## Custom raster tiles
-
-The default basemap uses CARTO's dark raster tiles. It can be changed:
+## Display options
 
 ```yaml
-map:
-  tile_url: https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
-  tile_attribution: "&copy; OpenStreetMap contributors"
-  tile_subdomains: abc
+display:
+  show_home_beacon: true
+  show_incident_card: true
+  show_clear_state: true
 ```
-
-## Supported incident coordinates
-
-The card accepts coordinates from:
-
-```text
-latitude / longitude
-lat / lon
-lat / lng
-coordinates
-location
-```
-
-It checks incident geometry under:
-
-```text
-geojson
-geometry
-polygon / polygons
-boundary / boundaries
-perimeter
-area
-```
-
-Supported geometry includes GeoJSON features and collections, nested polygon coordinate arrays and basic WKT `POLYGON((...))` strings.
 
 ## Troubleshooting
 
-1. Redownload the repository through HACS.
-2. Restart Home Assistant.
-3. Hard-refresh with `Ctrl + F5`.
-4. Confirm the loading screen says `Card 0.2.0-alpha`.
-5. Use `demo_mode: true` to separate map loading from live entity-data problems.
-6. Check the browser console for entries beginning with `[emergency-orbit-map-card]`.
+1. Redownload the card in HACS
+2. Restart Home Assistant
+3. Hard-refresh the browser
+4. Check the console for lines starting with `[emergency-orbit-map-card]`
+5. Start with `demo_mode: true` to confirm the map loads
 
-If the screen still says `Starting CSP-safe map canvas`, Home Assistant is serving the obsolete MapLibre build from cache. Change the resource URL to include `?v=0.2.0` and reload again.
+If the map stays on the loading screen, temporarily change the resource URL to:
 
-## External services
-
-The card loads Leaflet JavaScript and CSS from jsDelivr with an unpkg fallback. The default raster tiles come from CARTO and use OpenStreetMap data. Custom tile services can be configured through YAML.
+```text
+/hacsfiles/emergency-orbit-map-card/emergency-orbit-map-card.js?v=0.3.0
+```
 
 ## License
 

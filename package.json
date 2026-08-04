@@ -1,12 +1,12 @@
 {
   "name": "emergency-orbit-map-card",
-  "version": "0.2.3",
-  "description": "A worker-free emergency incident map card for Home Assistant with live markers, polygons, cinematic fly-in and orbit movement.",
+  "version": "0.3.0",
+  "description": "Home Assistant emergency incident map with CSS 3D orbit, animated home beacon, live markers and ABC Emergency support.",
   "type": "module",
   "scripts": {
     "check": "node --check dist/emergency-orbit-map-card.js"
   },
-  "keywords": ["home-assistant", "hacs", "lovelace", "leaflet", "emergency-map"],
+  "keywords": ["home-assistant", "hacs", "lovelace", "leaflet", "emergency-map", "abc-emergency"],
   "license": "MIT",
   "author": "alpha520098",
   "repository": {
