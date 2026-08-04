@@ -163,6 +163,7 @@ _syncMapData() {
         this._setSystem(this._terrainReady ? 'SYSTEM READY' : 'MAP READY');
       } else if (!this._firstFocusDone && this._config.camera.focus_on_load) {
         this._firstFocusDone = true;
+        this._suppressNextFocus = true;
         this._focusIncident(this._incidents[0], true);
       }
     }
