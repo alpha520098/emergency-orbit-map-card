@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.3.1 - CSS 3D orbit + animated beacon */
+/* Emergency Orbit Map Card v0.3.2 - CSS 3D orbit + animated beacon */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.3.1';
+const VERSION = '0.3.2';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -86,10 +86,10 @@ const clean = (value) => {
 };
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
-  '&': '&',
-  '<': '<',
-  '>': '>',
-  '"': '"',
+  '&': '\u0026amp;',
+  '<': '\u0026lt;',
+  '>': '\u0026gt;',
+  '"': '\u0026quot;',
   "'": '&#39;',
 })[character]);
 
@@ -351,6 +351,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
         .beacon.danger .beacon-ring{border-color:#ff414b}
         @keyframes beaconPulse{0%{transform:scale(0.4);opacity:0.85}100%{transform:scale(2.6);opacity:0}}
         .status{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:24px;text-align:center;color:#fff;background:#07101d;font:600 13px system-ui}
+        .status[hidden]{display:none!important}
         .status small{display:block;margin-top:10px;color:#8fb4df;font-weight:500}
         @media(max-width:650px){.panel{grid-template-columns:36px minmax(0,1fr)}.badge{width:36px;height:36px}.controls{grid-column:1/-1;justify-content:flex-end}}
       </style>
@@ -380,11 +381,17 @@ class EmergencyOrbitMapCard extends HTMLElement {
   }
 
   _setStatus(message, detail = '') {
+    if (!this._elements?.status) return;
     this._elements.status.hidden = false;
+    this._elements.status.style.display = '';
     this._elements.status.innerHTML = `<div>${escapeHtml(message)}<small>${escapeHtml(detail || `Card ${VERSION}`)}</small></div>`;
   }
 
-  _hideStatus() { this._elements.status.hidden = true; }
+  _hideStatus() {
+    if (!this._elements?.status) return;
+    this._elements.status.hidden = true;
+    this._elements.status.style.display = 'none';
+  }
 
   async _initialise() {
     if (this._map || this._initialising || !this._elements?.map) return;
@@ -430,6 +437,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
       this._showOverview(false);
       window.setTimeout(() => {
         this._map?.invalidateSize(false);
+        this._hideStatus();
         this._updateIncidents();
       }, 150);
     } catch (error) {
@@ -702,4 +710,4 @@ if (!window.customCards.some((card) => card.type === TAG)) {
     description: 'Emergency map with CSS 3D orbit, animated home beacon, live incidents and ABC Emergency support.',
   });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.1 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.2 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
