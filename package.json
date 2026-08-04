@@ -1,1 +1,26 @@
-PLACEHOLDER
+{
+  "name": "emergency-orbit-map-card",
+  "version": "0.2.1",
+  "description": "A worker-free emergency incident map card for Home Assistant with live markers, polygons, cinematic fly-in and orbit movement.",
+  "type": "module",
+  "scripts": {
+    "check": "node --check dist/emergency-orbit-map-card.js"
+  },
+  "keywords": [
+    "home-assistant",
+    "hacs",
+    "lovelace",
+    "leaflet",
+    "emergency-map"
+  ],
+  "license": "MIT",
+  "author": "alpha520098",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alpha520098/emergency-orbit-map-card.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alpha520098/emergency-orbit-map-card/issues"
+  },
+  "homepage": "https://github.com/alpha520098/emergency-orbit-map-card#readme"
+}
