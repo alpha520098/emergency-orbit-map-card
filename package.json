@@ -6,13 +6,7 @@
   "scripts": {
     "check": "node --check dist/emergency-orbit-map-card.js"
   },
-  "keywords": [
-    "home-assistant",
-    "hacs",
-    "lovelace",
-    "leaflet",
-    "emergency-map"
-  ],
+  "keywords": ["home-assistant", "hacs", "lovelace", "leaflet", "emergency-map"],
   "license": "MIT",
   "author": "alpha520098",
   "repository": {
