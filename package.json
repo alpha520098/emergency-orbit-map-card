@@ -1,6 +1,6 @@
 {
   "name": "emergency-orbit-map-card",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Home Assistant emergency incident map with CSS 3D orbit, animated home beacon, live markers and ABC Emergency support.",
   "type": "module",
   "scripts": {
