@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.3.0 - CSS 3D orbit + animated beacon */
+/* Emergency Orbit Map Card v0.3.1 - CSS 3D orbit + animated beacon */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -86,7 +86,11 @@ const clean = (value) => {
 };
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
-  '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;',
+  '&': '&',
+  '<': '<',
+  '>': '>',
+  '"': '"',
+  "'": '&#39;',
 })[character]);
 
 const normaliseLevel = (value) => {
@@ -339,7 +343,6 @@ class EmergencyOrbitMapCard extends HTMLElement {
         .control{padding:8px 10px;border:1px solid rgba(255,255,255,.16);border-radius:9px;color:#fff;background:rgba(255,255,255,.08);cursor:pointer}
         .incident-pin{width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:50% 50% 50% 7px;transform:rotate(-45deg);color:#fff;background:var(--pin-colour);box-shadow:0 0 0 6px color-mix(in srgb,var(--pin-colour) 25%,transparent),0 8px 22px #0009}
         .incident-pin span{transform:rotate(45deg);font-size:18px}
-        /* Animated home beacon */
         .beacon{width:28px;height:28px;position:relative}
         .beacon-core{position:absolute;inset:6px;border-radius:50%;background:#fff;box-shadow:0 0 10px #fff}
         .beacon-ring{position:absolute;inset:0;border-radius:50%;border:2px solid #fff;opacity:0;animation:beaconPulse 2.4s ease-out infinite}
@@ -699,4 +702,4 @@ if (!window.customCards.some((card) => card.type === TAG)) {
     description: 'Emergency map with CSS 3D orbit, animated home beacon, live incidents and ABC Emergency support.',
   });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.0 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.1 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
