@@ -1,6 +1,6 @@
 {
   "name": "emergency-orbit-map-card",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A worker-free emergency incident map card for Home Assistant with live markers, polygons, cinematic fly-in and orbit movement.",
   "type": "module",
   "scripts": {
