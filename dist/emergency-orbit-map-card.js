@@ -1,6 +1,6 @@
-/* Emergency Orbit Map Card v0.3.4 - interactive pan/zoom + orbit on demand */
+/* Emergency Orbit Map Card v0.3.5 - interactive map + reliable incident orbit */
 const TAG = 'emergency-orbit-map-card';
-const VERSION = '0.3.4';
+const VERSION = '0.3.5';
 const LEAFLET_VERSION = '1.9.4';
 
 const LEAFLET_JS = [
@@ -262,6 +262,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this._animationToken = 0;
     this._orbitFrame = 0;
     this._returnTimer = 0;
+    this._orbitFallback = 0;
     this._updateFrame = 0;
     this._bearing = 0;
     this._pitch = 0;
@@ -383,7 +384,13 @@ class EmergencyOrbitMapCard extends HTMLElement {
       status: this.shadowRoot.querySelector('.status'),
     };
     this.shadowRoot.querySelector('[data-action="overview"]').addEventListener('click', () => this._showOverview(true));
-    this.shadowRoot.querySelector('[data-action="orbit"]').addEventListener('click', () => this._focusIncident(this._incidents.find((item) => item.id === this._selectedId) ?? this._incidents[0], true));
+    this.shadowRoot.querySelector('[data-action="orbit"]').addEventListener('click', () => this._orbitSelected());
+  }
+
+  _orbitSelected() {
+    const incident = this._incidents.find((item) => item.id === this._selectedId) ?? this._incidents[0];
+    if (!incident) return;
+    this._focusIncident(incident, true, true);
   }
 
   _setStatus(message, detail = '') {
@@ -546,7 +553,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
       this._updateHomeBeacon();
     }
     const important = incidents.find((incident) => !previous.has(incident.id) || LEVELS[incident.level].rank > LEVELS[previous.get(incident.id) ?? 'none'].rank);
-    if (important && this._ready) this._focusIncident(important, true);
+    if (important && this._ready) this._focusIncident(important, true, false);
   }
 
   _drawLayers() {
@@ -567,7 +574,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
           title: incident.headline,
           zIndexOffset: 1000 + severity.rank * 100,
         }).addTo(this._map);
-        marker.on('click', () => this._focusIncident(incident, true));
+        marker.on('click', () => this._focusIncident(incident, true, false));
         item = { marker, polygon: null, geometryKey: '' };
         this._layers.set(incident.id, item);
       } else {
@@ -602,7 +609,7 @@ class EmergencyOrbitMapCard extends HTMLElement {
     if (!this._incidents.length) this._elements.panel.hidden = true;
   }
 
-  _focusIncident(incident, animate) {
+  _focusIncident(incident, animate, forceOrbit = false) {
     if (!incident || !this._ready) return;
     this._stopCamera(false);
     this._selectedId = incident.id;
@@ -620,38 +627,53 @@ class EmergencyOrbitMapCard extends HTMLElement {
         incident.status,
       ].filter(Boolean).join(' · ');
     }
+
     const token = ++this._animationToken;
+    const doOrbit = forceOrbit || this._config.camera.orbit;
+    const flyDuration = animate ? (numberValue(this._config.camera.fly_duration) ?? 2.8) : 0;
+
+    const startOrbit = () => {
+      this._map.off('moveend', startOrbit);
+      clearTimeout(this._orbitFallback);
+      this._orbitFallback = 0;
+      if (token !== this._animationToken) return;
+      if (doOrbit) this._orbitIncident(incident, token);
+      else this._scheduleReturn(token);
+    };
+
     const layer = this._layers.get(incident.id);
     if (layer?.polygon) {
       this._map.flyToBounds(layer.polygon.getBounds(), {
         padding: [90, 90],
         maxZoom: numberValue(this._config.map.incident_zoom) ?? 14,
-        duration: animate ? numberValue(this._config.camera.fly_duration) ?? 2.8 : 0,
+        duration: flyDuration,
       });
     } else {
       this._map.flyTo([incident.point[1], incident.point[0]], numberValue(this._config.map.incident_zoom) ?? 14, {
-        duration: animate ? numberValue(this._config.camera.fly_duration) ?? 2.8 : 0,
+        duration: flyDuration,
       });
     }
-    const startOrbit = () => {
-      this._map.off('moveend', startOrbit);
-      if (token !== this._animationToken) return;
-      this._config.camera.orbit ? this._orbitIncident(incident, token) : this._scheduleReturn(token);
-    };
+
     this._map.once('moveend', startOrbit);
-    if (!animate) startOrbit();
+    // Fallback: if already at the target, moveend may not fire
+    this._orbitFallback = window.setTimeout(startOrbit, Math.max(100, flyDuration * 1000 + 250));
   }
 
   _orbitIncident(incident, token) {
+    // Keep map centred on the incident while the CSS scene rotates around it
+    if (incident?.point) {
+      this._map.setView([incident.point[1], incident.point[0]], numberValue(this._config.map.incident_zoom) ?? 14, { animate: false });
+    }
     const start = performance.now();
     const duration = Math.max(8000, numberValue(this._config.camera.orbit_duration) ?? 18000);
     const initialBearing = -22;
-    this._applySceneTransform(numberValue(this._config.map.incident_pitch) ?? 58, initialBearing, 1.2, true);
+    const pitch = numberValue(this._config.map.incident_pitch) ?? 58;
+    this._applySceneTransform(pitch, initialBearing, 1.2, true);
     const frame = (now) => {
       if (token !== this._animationToken) return;
       const progress = Math.min(1, (now - start) / duration);
       const eased = progress < 0.5 ? 2 * progress * progress : 1 - ((-2 * progress + 2) ** 2) / 2;
-      this._applySceneTransform(numberValue(this._config.map.incident_pitch) ?? 58, initialBearing + 360 * eased, 1.2, false);
+      this._applySceneTransform(pitch, initialBearing + 360 * eased, 1.2, false);
       if (progress < 1) this._orbitFrame = requestAnimationFrame(frame);
       else {
         this._bearing = ((initialBearing + 360) % 360 + 360) % 360;
@@ -713,8 +735,10 @@ class EmergencyOrbitMapCard extends HTMLElement {
     this._animationToken += 1;
     cancelAnimationFrame(this._orbitFrame);
     clearTimeout(this._returnTimer);
+    clearTimeout(this._orbitFallback);
     this._orbitFrame = 0;
     this._returnTimer = 0;
+    this._orbitFallback = 0;
     if (flatten) this._flattenScene(true);
   }
 }
@@ -725,7 +749,7 @@ if (!window.customCards.some((card) => card.type === TAG)) {
   window.customCards.push({
     type: TAG,
     name: 'Emergency Orbit Map Card',
-    description: 'Emergency map with interactive pan/zoom, CSS 3D orbit, animated home beacon and ABC Emergency support.',
+    description: 'Emergency map with interactive pan/zoom, CSS 3D orbit around incidents, animated home beacon and ABC Emergency support.',
   });
 }
-console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.4 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
+console.info('%c EMERGENCY ORBIT MAP CARD %c v0.3.5 ', 'color:white;background:#1976d2;padding:3px', 'color:#dbeafe;background:#0f172a;padding:3px');
