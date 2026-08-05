@@ -196,12 +196,11 @@
         incident?.alertText,
         incident?.location,
         incident?.status,
-        incident?.source,
       ].filter(Boolean).join(' ').toLowerCase();
 
       const matches = (terms, text = fullText) => terms.some((term) => text.includes(term));
 
-      if (matches(['bushfire', 'bush fire', 'grass fire', 'structure fire', 'building fire', 'house fire', 'industrial fire', 'hazard reduction', 'smoke', 'fire'], typeText || fullText)) return 'fire';
+      if (matches(['bushfire', 'bush fire', 'grass fire', 'structure fire', 'building fire', 'house fire', 'industrial fire', 'hazard reduction', 'smoke', 'fire'], fullText)) return 'fire';
       if (matches(['flash flood', 'riverine flood', 'flooding', 'flood', 'tsunami', 'coastal inundation'])) return 'flood';
       if (matches(['thunderstorm', 'storm', 'lightning', 'hail', 'damaging wind', 'destructive wind', 'strong wind', 'cyclone', 'tornado', 'heatwave', 'heat wave', 'snow', 'blizzard', 'fog', 'dust storm', 'severe weather', 'weather'])) return 'weather';
       if (matches(['motor vehicle', 'vehicle incident', 'traffic incident', 'road crash', 'car crash', 'truck crash', 'collision', 'multi vehicle', 'multi-vehicle', 'accident', 'road closed', 'mva'])) return 'mva';
