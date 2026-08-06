@@ -1,7 +1,11 @@
-/* Emergency Orbit 3D Card loader v0.1.0-alpha.4 */
+/* Emergency Orbit 3D Card loader v0.1.0-alpha.5 */
+const EOM3D_BUILD = '0.1.0-alpha.5';
+
 const loadPart = (name) => new Promise((resolve, reject) => {
   const url = new URL(name, import.meta.url);
-  const existing = document.querySelector(`script[data-eom3d-part="${name}"]`);
+  url.searchParams.set('v', EOM3D_BUILD);
+  const selector = `script[data-eom3d-part="${name}"][data-eom3d-build="${EOM3D_BUILD}"]`;
+  const existing = document.querySelector(selector);
   if (existing) {
     if (existing.dataset.loaded === 'true') return resolve();
     existing.addEventListener('load', resolve, { once: true });
@@ -13,6 +17,7 @@ const loadPart = (name) => new Promise((resolve, reject) => {
   script.async = false;
   script.crossOrigin = 'anonymous';
   script.dataset.eom3dPart = name;
+  script.dataset.eom3dBuild = EOM3D_BUILD;
   script.onload = () => { script.dataset.loaded = 'true'; resolve(); };
   script.onerror = () => reject(new Error(`Failed to load ${url.href}`));
   document.head.appendChild(script);
