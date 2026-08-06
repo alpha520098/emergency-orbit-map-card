@@ -1,5 +1,5 @@
-/* Emergency Orbit 3D Card loader v0.1.0-alpha.5 */
-const EOM3D_BUILD = '0.1.0-alpha.5';
+/* Emergency Orbit 3D Card loader v0.1.0-alpha.6 */
+const EOM3D_BUILD = '0.1.0-alpha.6';
 
 const loadPart = (name) => new Promise((resolve, reject) => {
   const url = new URL(name, import.meta.url);
