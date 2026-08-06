@@ -1,4 +1,4 @@
-/* Emergency Orbit 3D Card base v0.1.0-alpha.1 */
+/* Emergency Orbit 3D Card base v0.1.0-alpha.4 */
 (() => {
   'use strict';
 
@@ -28,7 +28,7 @@ constructor() {
       this._moveFallback = 0;
       this._updateFrame = 0;
       this._resizeObserver = null;
-      this._panelOpen = true;
+      this._panelOpen = false;
       this._terrainReady = false;
       this._suppressNextFocus = false;
     }
@@ -47,7 +47,7 @@ constructor() {
 setConfig(config) {
       if (!config) throw new Error('Emergency Orbit 3D Card requires configuration.');
       this._config = merge(DEFAULTS, config);
-      this._panelOpen = this._config.display.panel_open !== false;
+      this._panelOpen = this._config.display?.panel_open === true;
       this._render();
       if (this.isConnected) this._ensureMap();
     },
