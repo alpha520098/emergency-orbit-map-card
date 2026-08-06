@@ -1,6 +1,6 @@
-/* Emergency Orbit 3D Card loader v0.1.0-alpha.7 */
-const EOM3D_BUILD = '0.1.0-alpha.7';
-const EOM3D_REMOTE_BASE = 'https://raw.githubusercontent.com/alpha520098/emergency-orbit-map-card/main/dist/';
+/* Emergency Orbit 3D Card loader v0.1.0-alpha.8 */
+const EOM3D_BUILD = '0.1.0-alpha.8';
+const EOM3D_REMOTE_BASE = 'https://cdn.jsdelivr.net/gh/alpha520098/emergency-orbit-map-card@main/dist/';
 
 const loadScript = (url, name, source) => new Promise((resolve, reject) => {
   const selector = `script[data-eom3d-part="${name}"][data-eom3d-build="${EOM3D_BUILD}"]`;
@@ -35,7 +35,7 @@ const loadPart = async (name) => {
   remote.searchParams.set('v', EOM3D_BUILD);
 
   try {
-    await loadScript(remote.href, name, 'github');
+    await loadScript(remote.href, name, 'jsdelivr');
     return;
   } catch (remoteError) {
     const local = new URL(name, import.meta.url);
