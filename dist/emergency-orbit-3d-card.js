@@ -1,4 +1,4 @@
-/* Emergency Orbit 3D Card loader v0.1.0-alpha.3 */
+/* Emergency Orbit 3D Card loader v0.1.0-alpha.4 */
 const loadPart = (name) => new Promise((resolve, reject) => {
   const url = new URL(name, import.meta.url);
   const existing = document.querySelector(`script[data-eom3d-part="${name}"]`);
@@ -27,6 +27,7 @@ for (const part of [
   'eom3d-card-camera.js',
   'eom3d-statewide.js',
   'eom3d-filters.js',
+  'eom3d-preferences.js',
 ]) {
   await loadPart(part);
 }
